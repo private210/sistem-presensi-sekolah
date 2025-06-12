@@ -53,6 +53,14 @@
 
             <form wire:submit="create">
                 {{ $this->form }}
+                <div class="mt-3 flex justify-end">
+                   <x-filament::button type="submit" color="primary" class="w-full sm:w-auto">
+                        <x-slot name="icon">
+                            <x-filament::icon icon="heroicon-m-paper-airplane" class="w-4 h-4" />
+                        </x-slot>
+                    Ajukan Izin
+                    </x-filament::button>
+                </div>
             </form>
         </div>
 

@@ -1,3 +1,36 @@
+<style>
+    .holiday-alert, .weekend-alert, .school-day-status {
+        width: 100%;
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .holiday-alert {
+        background: linear-gradient(135deg, #ea666632 0%, #c1323294 100%);
+    }
+
+    .weekend-alert {
+        background: linear-gradient(135deg, #667eea32 0%, #764ba294 100%);
+    }
+
+    .school-day-status {
+        background: linear-gradient(135deg, #667eea32 0%, #764ba294 100%);
+    }
+    @media screen and (max-width: 768px) {
+        .holiday-alert, .weekend-alert, .school-day-status {
+            width: 90%;
+        }
+
+        .holiday-alert h3, .weekend-alert h3, .school-day-status h3 {
+            font-size: 1.25rem;
+        }
+
+        
+
+    }
+</style>
+
+
 <x-filament-panels::page>
     {{-- Holiday Alert --}}
     @if($is_holiday)

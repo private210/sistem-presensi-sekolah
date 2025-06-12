@@ -113,7 +113,7 @@ class DashboardWaliKelasStats extends BaseWidget
                 ->descriptionIcon($belumPresensi > 0 ? 'heroicon-m-clock' : 'heroicon-m-check-circle')
                 ->color($belumPresensi > 0 ? 'warning' : 'success')
                 ->extraAttributes([
-                    'wire:click' => '$dispatch("openModal", { component: "presensi-harian" })',
+                    'wire:click' => '$dispatch("openModal", { component: "presensi-kelas" })',
                     'class' => 'cursor-pointer hover:bg-gray-50',
                 ]),
             // Izin Menunggu Persetujuan
@@ -141,7 +141,7 @@ class DashboardWaliKelasStats extends BaseWidget
             Stat::make('Ketidakhadiran', $izinBulanIni + $sakitBulanIni + $alphaBulanIni)
                 ->description("Izin: {$izinBulanIni} | Sakit: {$sakitBulanIni} | Alpha: {$alphaBulanIni}")
                 ->descriptionIcon('heroicon-m-exclamation-triangle')
-                ->color($alphaBulanIni > 0 ? 'danger' : 'info'),
+                ->color($alphaBulanIni > 0 ? 'danger' : 'info' ),
         ];
     }
 

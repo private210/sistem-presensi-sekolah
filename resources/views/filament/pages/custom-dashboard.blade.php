@@ -9,6 +9,12 @@
             /* margin-bottom: 2rem; */
             /* color: white; */
         }
+        .dashboard-header img {
+            width: 100px;
+            height: auto;
+            /* margin-left: auto; */
+            /* margin-right: 1rem; */
+        }
 
         .dashboard-stats {
             display: grid;
@@ -60,15 +66,16 @@
 
         @media (max-width: 768px) {
             .dashboard-header {
-                padding: 1.5rem;
+                padding: 1rem;
                 /* text-align: center; */
             }
 
             .widgets-container {
                 grid-template-columns: 1fr;
             }
-            .dashboard-header .text-right {
-                display: none;
+            .dashboard-header img {
+                /* display: none; */
+                margin-bottom: 5rem;
             }
         }
     </style>
@@ -80,11 +87,15 @@
                 <h1 class="text-3xl font-bold mb-2">{{ $this->getCustomHeading() }}</h1>
                 <p class="text-lg opacity-90">{{ $this->getCustomSubheading() }}</p>
                 <div class="time-info">
-                    {{ now()->format('l, d F Y') }} • {{ now()->format('H:i') }} WIB
+                    {{ now()->translatedFormat('l, d F Y') }} • {{ now()->format('H:i') }} WIB
                 </div>
             </div>
 
-            @if(auth()->user()->hasRole('Wali Kelas'))
+            <div class="tex-right">
+                <img src="{{ asset('images/LogoSD.png') }}" alt="">
+            </div>
+
+            {{-- @if(auth()->user()->hasRole('Wali Kelas'))
                 <div class="text-right">
                     <div class="text-sm opacity-75">Kelas yang Dipegang</div>
                     <div class="text-2xl font-bold">
@@ -104,7 +115,7 @@
                          {{ auth()->user()->waliMurid?->siswa?->kelas?->nama_kelas ?? '-' }}
                     </div>
                 </div>
-            @endif
+            @endif --}}
         </div>
     </div>
 
