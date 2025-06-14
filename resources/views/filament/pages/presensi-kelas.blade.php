@@ -1,47 +1,9 @@
-<style>
-    .holiday-alert, .weekend-alert, .school-day-status {
-        width: 100%;
-        max-width: 600px;
-        margin: 0 auto;
-    }
-
-    .holiday-alert {
-        background: linear-gradient(135deg, #ea666632 0%, #c1323294 100%);
-    }
-
-    .weekend-alert {
-        background: linear-gradient(135deg, #667eea32 0%, #764ba294 100%);
-    }
-
-    .school-day-status {
-        background: linear-gradient(135deg, #667eea32 0%, #764ba294 100%);
-    }
-    @media screen and (max-width: 768px) {
-        .holiday-alert, .weekend-alert, .school-day-status {
-            width: 90%;
-        }
-
-        .holiday-alert h3, .weekend-alert h3, .school-day-status h3 {
-            font-size: 1.25rem;
-        }
-
-        
-
-    }
-</style>
-
-
 <x-filament-panels::page>
     {{-- Holiday Alert --}}
     @if($is_holiday)
         <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg" style="width: 35%; background: linear-gradient(135deg, #ea666632 0%, #c1323294 100%);">
             <div class="flex items-start">
                 <div class="flex-shrink-0 mt-0.5">
-                    {{-- <div class="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
-                        <svg class="h-4 w-4 text-red-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" />
-                        </svg>
-                    </div> --}}
                 </div>
                 <div class="ml-3 flex-1">
                     <h3 class="text-sm font-semibold text-red-800 mb-2">🏮 Informasi Hari Libur</h3>
@@ -69,11 +31,6 @@
         <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg" style="width: 40%; background: linear-gradient(135deg, #667eea32 0%, #764ba294 100%);">
             <div class="flex items-start">
                 <div class="flex-shrink-0 mt-0.5">
-                    {{-- <div class="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                        <svg class="h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M10 2L3 7v11a2 2 0 002 2h10a2 2 0 002-2V7l-7-5zM8 15V9h4v6H8z"/>
-                        </svg>
-                    </div> --}}
                 </div>
                 <div class="ml-3 flex-1">
                     <h3 class="text-md font-semibold text-blue-800 mb-2">🏠 Informasi Akhir Pekan</h3>
@@ -101,11 +58,6 @@
         <div class="mb-4 p-4 bg-green-50 border border-dashed border-green-200 rounded-lg" style="width: 45%; background: linear-gradient(135deg, #667eea32 0%, #764ba294 100%);">
             <div class="flex items-start">
                 <div class="flex-shrink-0 mt-0.5">
-                    {{-- <div class="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
-                        <svg class="h-4 w-4 text-green-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.236 4.53L8.139 10.6a.75.75 0 101.122-1.002l1.614 1.804 3.657-5.11z" clip-rule="evenodd" />
-                        </svg>
-                    </div> --}}
                 </div>
                 <div class="ml-3 flex-1">
                     <h3 class="text-md font-semibold text-green-800 mb-2">📚 Informasi Hari Sekolah</h3>
@@ -121,13 +73,13 @@
                         @if(Carbon\Carbon::parse($tanggal)->isToday())
                             <li class="flex items-start">
                                 <span class="w-2 h-2 bg-green-400 rounded-full mt-2 mr-3 flex-shrink-0 text-md"></span>
-                                <span>🗓️  Hari ini: {{ Carbon\Carbon::parse($tanggal)->translatedFormat('l, d F Y') }}</span>
+                                <span>🗓️ Hari ini: {{ Carbon\Carbon::parse($tanggal)->translatedFormat('l, d F Y') }}</span>
                             </li>
                         @else
                             <li class="flex items-start">
                                 <span class="w-2 h-2 bg-green-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
                                 <x-filament::icon name="heroicon-s-calendar" class="w-4 h-4 text-green-600 mr-2" />
-                                <span> Tanggal: {{ Carbon\Carbon::parse($tanggal)->translatedFormat('l, d F Y') }}</span>
+                                <span>🗓️ Tanggal: {{ Carbon\Carbon::parse($tanggal)->translatedFormat('l, d F Y') }}</span>
                             </li>
                         @endif
                     </ul>
@@ -137,7 +89,9 @@
     @endif
 
     {{-- Main Form --}}
-    {{ $this->form }}
+    <div class="form-section">
+        {{ $this->form }}
+    </div>
 
     {{-- Main Table --}}
     <div class="mt-4">

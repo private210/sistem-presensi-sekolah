@@ -9,8 +9,11 @@ use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Tables\Actions\Action as TableAction;
+use Filament\Tables\Actions\ActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -83,6 +86,9 @@ class RekapKepalaSekolah extends Page implements HasTable
                         'Tanpa Keterangan' => 'danger',
                         default => 'gray',
                     }),
+                TextColumn::make('pertemuan_ke')
+                    ->label('Pertemuan')
+                    ->sortable(),
                 TextColumn::make('keterangan')
                     ->label('Keterangan')
                     ->limit(30)
@@ -137,16 +143,86 @@ class RekapKepalaSekolah extends Page implements HasTable
             ->defaultGroup('kelas.nama_kelas')
             ->paginated([10, 25, 50, 100])
             ->headerActions([
-                // Use TableAction for table header actions
-                TableAction::make('export')
-                    ->label('Ekspor Data')
-                    ->color('success')
+                // TableAction::make('filterData')
+                //     ->label('Filter Data')
+                //     ->color('info')
+                //     ->icon('heroicon-o-funnel')
+                //     ->form([
+                //         DatePicker::make('tanggal_mulai')
+                //             ->label('Tanggal Mulai')
+                //             ->default($this->tanggal_mulai)
+                //             ->required(),
+                //         DatePicker::make('tanggal_selesai')
+                //             ->label('Tanggal Selesai')
+                //             ->default($this->tanggal_selesai)
+                //             ->required()
+                //             ->afterOrEqual('tanggal_mulai'),
+                //         Select::make('kelas_id')
+                //             ->label('Kelas (Opsional)')
+                //             ->options(Kelas::pluck('nama_kelas', 'id'))
+                //             ->placeholder('Semua Kelas')
+                //             ->default($this->kelas_id),
+                //     ])
+                //     ->action(function (array $data) {
+                //         $this->updateDateFilters($data['tanggal_mulai'], $data['tanggal_selesai'], $data['kelas_id'] ?? null);
+
+                //         Notification::make()
+                //             ->title('Filter Berhasil Diterapkan')
+                //             ->success()
+                //             ->send();
+                //     }),
+                TableAction::make('refreshData')
+                    ->label('Refresh Data')
+                    ->color('secondary')
+                    ->icon('heroicon-o-arrow-path')
+                    ->action(function () {
+                        $this->resetTable();
+                        $this->dispatch('$refresh');
+
+                        Notification::make()
+                            ->title('Data berhasil di-refresh')
+                            ->success()
+                            ->send();
+                    }),
+                ActionGroup::make([
+                    TableAction::make('exportExcel')
+                        ->label('Export Excel')
+                        ->color('success')
+                        ->icon('heroicon-o-document-arrow-down')
+                        ->action(function () {
+                            $params = [
+                                'tanggal_mulai' => $this->tanggal_mulai,
+                                'tanggal_selesai' => $this->tanggal_selesai,
+                            ];
+
+                            if ($this->kelas_id) {
+                                $params['kelas_id'] = $this->kelas_id;
+                            }
+
+                            return redirect()->to(route('export.presensi.kepala-sekolah', $params));
+                        }),
+
+                    TableAction::make('exportPdf')
+                        ->label('Export PDF')
+                        ->color('danger')
+                        ->icon('heroicon-o-document-text')
+                        ->action(function () {
+                            $params = [
+                                'tanggal_mulai' => $this->tanggal_mulai,
+                                'tanggal_selesai' => $this->tanggal_selesai,
+                            ];
+
+                            if ($this->kelas_id) {
+                                $params['kelas_id'] = $this->kelas_id;
+                            }
+
+                            return redirect()->to(route('export.presensi.kepala-sekolah-pdf', $params));
+                        }),
+                ])
+                    ->label('Export Data')
+                    ->color('primary')
                     ->icon('heroicon-o-arrow-down-tray')
-                    ->url(fn() => route('export.presensi.kepala-sekolah', [
-                        'tanggal_mulai' => $this->tanggal_mulai,
-                        'tanggal_selesai' => $this->tanggal_selesai,
-                        'kelas_id' => $this->kelas_id,
-                    ])),
+                    ->button(),
             ]);
     }
 
@@ -158,31 +234,62 @@ class RekapKepalaSekolah extends Page implements HasTable
     }
 
     // Page-level header actions (different from table header actions)
-    protected function getHeaderActions(): array
-    {
-        return [
-            Action::make('exportAllData')
-                ->label('Ekspor Semua Data')
-                ->color('primary')
-                ->icon('heroicon-o-document-arrow-down')
-                ->action(function () {
-                    return redirect()->to(route('export.presensi.kepala-sekolah', [
-                        'tanggal_mulai' => $this->tanggal_mulai,
-                        'tanggal_selesai' => $this->tanggal_selesai,
-                        'kelas_id' => $this->kelas_id,
-                    ]));
-                }),
+    // protected function getHeaderActions(): array
+    // {
+    //     return [
+    //         ActionGroup::make([
+    //             Action::make('exportAllExcel')
+    //                 ->label('Export All Excel')
+    //                 ->color('success')
+    //                 ->icon('heroicon-o-document-arrow-down')
+    //                 ->action(function () {
+    //                     $params = [
+    //                         'tanggal_mulai' => $this->tanggal_mulai,
+    //                         'tanggal_selesai' => $this->tanggal_selesai,
+    //                     ];
 
-            Action::make('refreshData')
-                ->label('Refresh Data')
-                ->color('gray')
-                ->icon('heroicon-o-arrow-path')
-                ->action(function () {
-                    $this->resetTable();
-                    $this->dispatch('$refresh');
-                }),
-        ];
-    }
+    //                     if ($this->kelas_id) {
+    //                         $params['kelas_id'] = $this->kelas_id;
+    //                     }
+
+    //                     Notification::make()
+    //                         ->title('Download Excel dimulai')
+    //                         ->success()
+    //                         ->send();
+
+    //                     return redirect()->to(route('export.presensi.kepala-sekolah', $params));
+    //                 }),
+
+    //             Action::make('exportAllPdf')
+    //                 ->label('Export All PDF')
+    //                 ->color('danger')
+    //                 ->icon('heroicon-o-document-text')
+    //                 ->action(function () {
+    //                     $params = [
+    //                         'tanggal_mulai' => $this->tanggal_mulai,
+    //                         'tanggal_selesai' => $this->tanggal_selesai,
+    //                     ];
+
+    //                     if ($this->kelas_id) {
+    //                         $params['kelas_id'] = $this->kelas_id;
+    //                     }
+
+    //                     Notification::make()
+    //                         ->title('Download PDF dimulai')
+    //                         ->success()
+    //                         ->send();
+
+    //                     return redirect()->to(route('export.presensi.kepala-sekolah-pdf', $params));
+    //                 }),
+    //         ])
+    //             ->label('Export Data')
+    //             ->color('primary')
+    //             ->icon('heroicon-o-arrow-down-tray')
+    //             ->button(),
+
+
+    //     ];
+    // }
 
     public function getKelasStats()
     {
@@ -216,5 +323,24 @@ class RekapKepalaSekolah extends Page implements HasTable
 
         // Refresh the table
         $this->resetTable();
+    }
+
+    // Method untuk mendapatkan statistik keseluruhan
+    public function getOverallStats()
+    {
+        $query = Presensi::whereBetween('tanggal_presensi', [$this->tanggal_mulai, $this->tanggal_selesai]);
+
+        if ($this->kelas_id) {
+            $query->where('kelas_id', $this->kelas_id);
+        }
+
+        return [
+            'total_data' => $query->count(),
+            'total_hadir' => $query->clone()->where('status', 'Hadir')->count(),
+            'total_izin' => $query->clone()->where('status', 'Izin')->count(),
+            'total_sakit' => $query->clone()->where('status', 'Sakit')->count(),
+            'total_alpha' => $query->clone()->where('status', 'Tanpa Keterangan')->count(),
+            'total_siswa' => $query->clone()->distinct('siswa_id')->count(),
+        ];
     }
 }
