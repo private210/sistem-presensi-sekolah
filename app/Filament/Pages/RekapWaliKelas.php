@@ -146,7 +146,7 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
                         'Hadir' => 'success',
                         'Izin' => 'info',
                         'Sakit' => 'warning',
-                        'Tanpa Keterangan' => 'danger',
+                        'Alpa' => 'danger',
                         default => 'gray',
                     })
                     ->summarize([
@@ -182,7 +182,7 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
                                         'Hadir' => 'success',
                                         'Izin' => 'info',
                                         'Sakit' => 'warning',
-                                        'Tanpa Keterangan' => 'danger',
+                                        'Alpa' => 'danger',
                                         default => 'gray',
                                     }),
                             ])
@@ -239,7 +239,7 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
                         'Hadir' => 'Hadir',
                         'Izin' => 'Izin',
                         'Sakit' => 'Sakit',
-                        'Tanpa Keterangan' => 'Tanpa Keterangan',
+                        'Alpa' => 'Alpa',
                     ]),
                 SelectFilter::make('kelas_id')
                     ->label('Kelas')
@@ -441,7 +441,7 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
             SUM(CASE WHEN status = "Hadir" THEN 1 ELSE 0 END) as total_hadir,
             SUM(CASE WHEN status = "Izin" THEN 1 ELSE 0 END) as total_izin,
             SUM(CASE WHEN status = "Sakit" THEN 1 ELSE 0 END) as total_sakit,
-            SUM(CASE WHEN status = "Tanpa Keterangan" THEN 1 ELSE 0 END) as total_alpha
+            SUM(CASE WHEN status = "Alpa" THEN 1 ELSE 0 END) as total_alpha
         ')
             ->groupBy('pertemuan_ke')
             ->orderBy('pertemuan_ke')
@@ -524,7 +524,7 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
             'total_kehadiran' => $query->clone()->where('status', 'Hadir')->count(),
             'total_izin' => $query->clone()->where('status', 'Izin')->count(),
             'total_sakit' => $query->clone()->where('status', 'Sakit')->count(),
-            'total_alpha' => $query->clone()->where('status', 'Tanpa Keterangan')->count(),
+            'total_alpha' => $query->clone()->where('status', 'Alpa')->count(),
             'total_siswa' => $query->clone()->distinct('siswa_id')->count(),
             'persentase_kehadiran' => $this->hitungPersentaseKehadiran(),
             'total_pertemuan' => count($this->getAvailablePertemuan()),

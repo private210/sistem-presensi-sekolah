@@ -384,7 +384,7 @@ class PresensiKelas extends Page implements HasForms, HasTable
                                 $this->autoCreatePastAttendance();
                             }),
                         TextInput::make('pertemuan_ke')
-                            ->label('Pertemuan Ke')
+                            ->label('Hari Ke')
                             ->numeric()
                             ->required()
                             ->disabled($this->is_non_school_day)
@@ -552,7 +552,7 @@ class PresensiKelas extends Page implements HasForms, HasTable
                         'Hadir' => 'success',
                         'Izin' => 'info',
                         'Sakit' => 'warning',
-                        'Tanpa Keterangan' => 'danger',
+                        'Alpa' => 'danger',
                         'Libur' => 'gray',
                         null => 'gray',
                         default => 'gray',
@@ -611,7 +611,7 @@ class PresensiKelas extends Page implements HasForms, HasTable
                                 'hadir' => 'Hadir',
                                 'izin' => 'Izin',
                                 'sakit' => 'Sakit',
-                                'tanpa_keterangan' => 'Tanpa Keterangan',
+                                'alpa' => 'Alpa (Tanpa Keterangan)',
                                 'libur' => 'Hari Libur',
                                 'has_approved_izin' => 'Memiliki Izin Disetujui',
                             ])
@@ -643,8 +643,8 @@ class PresensiKelas extends Page implements HasForms, HasTable
                                 $status = strtolower($siswa['status'] ?? '');
                                 $filterStatus = $data['status'];
 
-                                if ($filterStatus === 'tanpa_keterangan') {
-                                    return $status === 'tanpa keterangan';
+                                if ($filterStatus === 'alpa') {
+                                    return $status === 'alpa';
                                 }
 
                                 return $status === $filterStatus;
@@ -667,7 +667,7 @@ class PresensiKelas extends Page implements HasForms, HasTable
                                 'Hadir' => 'Hadir',
                                 'Izin' => 'Izin',
                                 'Sakit' => 'Sakit',
-                                'Tanpa Keterangan' => 'Tanpa Keterangan',
+                                'Alpa' => 'Alpa',
                             ])
                             ->required(),
                         TextInput::make('keterangan')

@@ -177,7 +177,7 @@ class RekapWaliMurid extends Page implements HasForms, HasTable
                         'Hadir' => 'success',
                         'Izin' => 'info',
                         'Sakit' => 'warning',
-                        'Tanpa Keterangan' => 'danger',
+                        'Alpa' => 'danger',
                         default => 'gray',
                     })
                     ->summarize(Count::make()->label('Total')),
@@ -196,7 +196,7 @@ class RekapWaliMurid extends Page implements HasForms, HasTable
                         'Hadir' => 'Hadir',
                         'Izin' => 'Izin',
                         'Sakit' => 'Sakit',
-                        'Tanpa Keterangan' => 'Tanpa Keterangan',
+                        'Alpa' => 'Alpa (Tanpa Keterangan)',
                     ]),
                 SelectFilter::make('kelas_id')
                     ->label('Kelas')
@@ -349,7 +349,7 @@ class RekapWaliMurid extends Page implements HasForms, HasTable
             'total_kehadiran' => $query->clone()->where('status', 'Hadir')->count(),
             'total_izin' => $query->clone()->where('status', 'Izin')->count(),
             'total_sakit' => $query->clone()->where('status', 'Sakit')->count(),
-            'total_alpha' => $query->clone()->where('status', 'Tanpa Keterangan')->count(),
+            'total_alpha' => $query->clone()->where('status', 'Alpa')->count(),
             'total_siswa' => $query->clone()->distinct('siswa_id')->count(),
             'persentase_kehadiran' => $this->hitungPersentaseKehadiran(),
         ];
