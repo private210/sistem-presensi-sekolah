@@ -26,11 +26,6 @@ class KelasResource extends Resource
                     ->label('Nama Kelas')
                     ->required()
                     ->maxLength(255),
-                Forms\Components\TextInput::make('kode_kelas')
-                    ->label('Kode Kelas')
-                    ->required()
-                    ->unique(ignoreRecord: true)
-                    ->maxLength(255),
                 Forms\Components\TextInput::make('tahun_ajaran')
                     ->label('Tahun Ajaran')
                     ->required()
@@ -48,9 +43,6 @@ class KelasResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('nama_kelas')
                     ->label('Nama Kelas')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('kode_kelas')
-                    ->label('Kode Kelas')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('tahun_ajaran')
                     ->label('Tahun Ajaran')

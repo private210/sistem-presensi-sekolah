@@ -2,23 +2,25 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\WaliKelasResource\Pages;
-use App\Models\Kelas;
-use App\Models\User;
-use App\Models\WaliKelas;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
+use App\Models\User;
 use Filament\Tables;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
+use App\Models\KepalaSekolah;
+use Filament\Resources\Resource;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Filament\Resources\KepalaSekolahResource\Pages;
+use App\Filament\Resources\KepalaSekolahResource\RelationManagers;
 
-class WaliKelasResource extends Resource
+class KepalaSekolahResource extends Resource
 {
-    protected static ?string $model = WaliKelas::class;
+    protected static ?string $model = KepalaSekolah::class;
     protected static ?string $navigationIcon = 'heroicon-o-users';
     protected static ?string $navigationGroup = 'Manajemen Pengguna';
-    protected static ?string $navigationLabel = 'Wali Kelas';
+    protected static ?string $navigationLabel = 'Kepala Sekolah';
 
     public static function form(Form $form): Form
     {
@@ -47,40 +49,16 @@ class WaliKelasResource extends Resource
                             ->maxLength(32),
                     ]),
 
-                // Data Wali Kelas
-                Forms\Components\Section::make('Data Wali Kelas')
+                // Data  Kepala Sekolah
+                Forms\Components\Section::make('Data Kepala Sekolah')
                     ->schema([
+                        Forms\Components\TextInput::make('nip')
+                            ->label('NIP')
+                            ->maxLength(20),
                         Forms\Components\TextInput::make('nama_lengkap')
                             ->label('Nama Lengkap')
                             ->required()
                             ->maxLength(255),
-                        Forms\Components\TextInput::make('nip')
-                            ->label('NIP')
-                            ->maxLength(20),
-                        Forms\Components\Select::make('kelas_id')
-                            ->label('Kelas yang Dipegang')
-                            ->relationship('kelas', 'nama_kelas')
-                            ->options(
-                                Kelas::where('is_active', true)
-                                    ->whereDoesntHave('waliKelas')
-                                    ->orWhereHas('waliKelas', function ($query) use ($form) {
-                                        // Exclude classes that already have a wali kelas, except the current one
-                                        if ($form->getRecord()) {
-                                            $query->where('wali_kelas.id', $form->getRecord()->id);
-                                        }
-                                    })
-                                    ->pluck('nama_kelas', 'id')
-                            )
-                            // ->searchable()
-                            ->required(),
-                        Forms\Components\FileUpload::make('foto')
-                            ->label('Foto')
-                            ->image()
-                            ->directory('wali-kelas')
-                            ->visibility('public')
-                            ->hint('Unggah file dalam format JPEG/PNG/JPG dengan ukuran maksimal 2MB')
-                            ->maxSize(2048)
-                            ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/jpg']),
                         Forms\Components\Toggle::make('is_active')
                             ->label('Aktif')
                             ->required()
@@ -93,15 +71,12 @@ class WaliKelasResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('nama_lengkap')
-                    ->label('Nama Lengkap')
-                    ->searchable(),
                 Tables\Columns\TextColumn::make('nip')
                     ->label('NIP')
                     ->searchable(),
-                Tables\Columns\TextColumn::make('kelas.nama_kelas')
-                    ->label('Wali Kelas')
-                    ->sortable(),
+                Tables\Columns\TextColumn::make('nama_lengkap')
+                    ->label('Nama Lengkap')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('user.email')
                     ->label('Email')
                     ->searchable(),
@@ -147,17 +122,16 @@ class WaliKelasResource extends Resource
                                     ]);
                                 }
 
-                                // Pastikan user memiliki role wali_kelas
-                                if (!$record->user->hasRole('Wali Kelas')) {
-                                    $record->user->assignRole('Wali Kelas');
+                                // Pastikan user memiliki role Kepala Sekolah
+                                if (!$record->user->hasRole('Kepala Sekolah')) {
+                                    $record->user->assignRole('Kepala Sekolah');
                                 }
                             }
 
                             // Update wali kelas data
                             $record->update([
-                                'nama_lengkap' => $data['nama_lengkap'],
                                 'nip' => $data['nip'] ?? $record->nip,
-                                'kelas_id' => $data['kelas_id'],
+                                'nama_lengkap' => $data['nama_lengkap'],
                                 'is_active' => $data['is_active'],
                             ]);
 
@@ -184,7 +158,7 @@ class WaliKelasResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListWaliKelas::route('/'),
+            'index' => Pages\ListKepalaSekolahs::route('/'),
             // 'create' => Pages\CreateWaliKelas::route('/create'),
             // 'view' => Pages\ViewWaliKelas::route('/{record}'),
             // 'edit' => Pages\EditWaliKelas::route('/{record}/edit'),

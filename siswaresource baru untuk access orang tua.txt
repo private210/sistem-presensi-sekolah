@@ -1,0 +1,411 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\SiswaResource\Pages;
+use App\Models\Kelas;
+use App\Models\Siswa;
+use App\Models\User;
+use Filament\Forms;
+use Filament\Forms\Form;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\Builder;
+
+class SiswaResource extends Resource
+{
+    protected static ?string $model = Siswa::class;
+    protected static ?string $navigationIcon = 'heroicon-o-user-group';
+    protected static ?string $navigationGroup = 'Manajemen Sekolah';
+    protected static ?string $navigationLabel = 'Daftar Siswa';
+
+    public static function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                // Data Siswa
+                Forms\Components\Section::make('Data Siswa')
+                    ->schema([
+                        Forms\Components\TextInput::make('nis')
+                            ->label('NIS')
+                            ->required()
+                            ->unique(ignoreRecord: true)
+                            ->maxLength(20)
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
+                                // Auto-generate email berdasarkan NIS
+                                if ($state && !$get('user.email')) {
+                                    $email = $state . '@sekolah.com';
+
+                                    // Cek apakah email sudah ada
+                                    $counter = 1;
+                                    $originalEmail = $email;
+                                    while (User::where('email', $email)->exists()) {
+                                        $email = str_replace('@sekolah.com', $counter . '@sekolah.com', $originalEmail);
+                                        $counter++;
+                                    }
+
+                                    $set('user.email', $email);
+
+                                    // Generate password default (NIS + tahun lahir atau tahun sekarang)
+                                    $tahunLahir = $get('tanggal_lahir') ? date('Y', strtotime($get('tanggal_lahir'))) : date('Y');
+                                    $passwordDefault = $state . $tahunLahir;
+                                    $set('password', $passwordDefault);
+                                }
+                            }),
+                        Forms\Components\TextInput::make('nama_lengkap')
+                            ->label('Nama Lengkap')
+                            ->required()
+                            ->maxLength(255)
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, Forms\Set $set) {
+                                // Auto-fill nama pengguna
+                                if ($state) {
+                                    $set('user.name', $state);
+                                }
+                            }),
+                        Forms\Components\Select::make('kelas_id')
+                            ->label('Kelas')
+                            ->options(function () {
+                                // Jika user adalah wali kelas, hanya tampilkan kelas yang dia pegang
+                                if (auth()->user()->hasRole('Wali Kelas')) {
+                                    $waliKelas = auth()->user()->waliKelas;
+                                    if ($waliKelas) {
+                                        return Kelas::where('id', $waliKelas->kelas_id)
+                                            ->where('is_active', true)
+                                            ->pluck('nama_kelas', 'id');
+                                    }
+                                    return collect();
+                                }
+
+                                // Admin dan Kepala Sekolah bisa lihat semua
+                                return Kelas::where('is_active', true)
+                                    ->pluck('nama_kelas', 'id');
+                            })
+                            ->searchable()
+                            ->required(),
+                        Forms\Components\Select::make('jenis_kelamin')
+                            ->label('Jenis Kelamin')
+                            ->options([
+                                'L' => 'Laki-laki',
+                                'P' => 'Perempuan',
+                            ])
+                            ->required(),
+                        Forms\Components\DatePicker::make('tanggal_lahir')
+                            ->label('Tanggal Lahir')
+                            ->required()
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
+                                // Update password jika NIS sudah terisi
+                                $nis = $get('nis');
+                                if ($state && $nis) {
+                                    $tahunLahir = date('Y', strtotime($state));
+                                    $passwordDefault = $nis . $tahunLahir;
+                                    $set('password', $passwordDefault);
+                                }
+                            }),
+                        Forms\Components\Textarea::make('alamat')
+                            ->label('Alamat')
+                            ->maxLength(500)
+                            ->columnSpanFull(),
+                        Forms\Components\FileUpload::make('foto')
+                            ->label('Foto')
+                            ->image()
+                            ->directory('siswa-photos')
+                            ->visibility('public')
+                            ->imageResizeMode('cover')
+                            ->imageCropAspectRatio('1:1')
+                            ->imageResizeTargetWidth('300')
+                            ->imageResizeTargetHeight('300'),
+                        Forms\Components\Toggle::make('is_active')
+                            ->label('Aktif')
+                            ->required()
+                            ->default(true),
+                    ]),
+
+                // Data Akun
+                Forms\Components\Section::make('Data Akun Siswa')
+                    ->description('Akun untuk siswa login ke sistem')
+                    ->schema([
+                        Forms\Components\Toggle::make('create_user_account')
+                            ->label('Buat Akun User')
+                            ->helperText('Centang untuk membuat akun login untuk siswa')
+                            ->default(true)
+                            ->reactive()
+                            ->visible(fn(string $operation): bool => $operation === 'create'),
+                        Forms\Components\TextInput::make('user.name')
+                            ->label('Nama Pengguna')
+                            ->required(fn(Forms\Get $get): bool => $get('create_user_account') === true)
+                            ->maxLength(255)
+                            ->visible(fn(Forms\Get $get): bool => $get('create_user_account') === true)
+                            ->helperText('Otomatis terisi dari nama lengkap siswa'),
+                        Forms\Components\TextInput::make('user.email')
+                            ->label('Email')
+                            ->email()
+                            ->required(fn(Forms\Get $get): bool => $get('create_user_account') === true)
+                            ->maxLength(255)
+                            ->unique(table: User::class, column: 'email', ignoreRecord: true)
+                            ->visible(fn(Forms\Get $get): bool => $get('create_user_account') === true)
+                            ->helperText('Otomatis terisi berdasarkan NIS'),
+                        Forms\Components\TextInput::make('password')
+                            ->label('Password')
+                            ->password()
+                            ->dehydrated(fn($state) => filled($state))
+                            ->dehydrateStateUsing(fn($state) => Hash::make($state))
+                            ->required(fn(string $operation, Forms\Get $get): bool => $operation === 'create' && $get('create_user_account') === true)
+                            ->minLength(6)
+                            ->maxLength(255)
+                            ->visible(fn(Forms\Get $get, string $operation): bool =>
+                                ($operation === 'create' && $get('create_user_account') === true) ||
+                                ($operation === 'edit' && $get('user_id') !== null)
+                            )
+                            ->helperText('Password default: NIS + Tahun Lahir. Harap segera diganti untuk keamanan'),
+                    ])
+                    ->collapsible()
+                    ->collapsed(false),
+            ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                Tables\Columns\TextColumn::make('nis')
+                    ->label('NIS')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('nama_lengkap')
+                    ->label('Nama Lengkap')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('kelas.nama_kelas')
+                    ->label('Kelas')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('jenis_kelamin')
+                    ->label('Jenis Kelamin')
+                    ->formatStateUsing(fn(string $state): string => $state === 'L' ? 'Laki-laki' : 'Perempuan'),
+                Tables\Columns\TextColumn::make('user.email')
+                    ->label('Email')
+                    ->searchable()
+                    ->toggleable(),
+                Tables\Columns\IconColumn::make('user_id')
+                    ->label('Punya Akun')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->trueColor('success')
+                    ->falseColor('danger')
+                    ->getStateUsing(fn($record) => $record->user_id !== null),
+                Tables\Columns\IconColumn::make('is_active')
+                    ->label('Status')
+                    ->boolean(),
+                Tables\Columns\TextColumn::make('created_at')
+                    ->label('Dibuat Pada')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->filters([
+                Tables\Filters\SelectFilter::make('kelas_id')
+                    ->label('Kelas')
+                    ->options(function () {
+                        // Jika user adalah wali kelas, hanya tampilkan kelas yang dia pegang
+                        if (auth()->user()->hasRole('Wali Kelas')) {
+                            $waliKelas = auth()->user()->waliKelas;
+                            if ($waliKelas) {
+                                return Kelas::where('id', $waliKelas->kelas_id)
+                                    ->pluck('nama_kelas', 'id');
+                            }
+                            return collect();
+                        }
+
+                        // Admin dan Kepala Sekolah bisa lihat semua
+                        return Kelas::pluck('nama_kelas', 'id');
+                    }),
+                Tables\Filters\SelectFilter::make('jenis_kelamin')
+                    ->label('Jenis Kelamin')
+                    ->options([
+                        'L' => 'Laki-laki',
+                        'P' => 'Perempuan',
+                    ]),
+                Tables\Filters\TernaryFilter::make('is_active')
+                    ->label('Status Aktif'),
+                Tables\Filters\TernaryFilter::make('has_user_account')
+                    ->label('Punya Akun')
+                    ->queries(
+                        true: fn (Builder $query) => $query->whereNotNull('user_id'),
+                        false: fn (Builder $query) => $query->whereNull('user_id'),
+                    ),
+            ])
+            ->actions([
+                Tables\Actions\ViewAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->mutateRecordDataUsing(function (array $data, $record): array {
+                        // Data untuk ditampilkan di form
+                        if ($record->user) {
+                            $data['user']['name'] = $record->user->name;
+                            $data['user']['email'] = $record->user->email;
+                        }
+                        return $data;
+                    })
+                    ->using(function ($record, array $data) {
+                        // Handle update data di sini
+                        return \Illuminate\Support\Facades\DB::transaction(function () use ($record, $data) {
+                            // Update data siswa
+                            $record->update([
+                                'nis' => $data['nis'],
+                                'nama_lengkap' => $data['nama_lengkap'],
+                                'kelas_id' => $data['kelas_id'],
+                                'jenis_kelamin' => $data['jenis_kelamin'],
+                                'tanggal_lahir' => $data['tanggal_lahir'],
+                                'alamat' => $data['alamat'],
+                                'foto' => $data['foto'],
+                                'is_active' => $data['is_active'],
+                            ]);
+
+                            // Update user data jika ada
+                            if (isset($data['user']) && $record->user) {
+                                $record->user->update([
+                                    'name' => $data['user']['name'],
+                                    'email' => $data['user']['email'],
+                                ]);
+
+                                // Update password jika diisi
+                                if (!empty($data['password'])) {
+                                    $record->user->update([
+                                        'password' => $data['password'],
+                                    ]);
+                                }
+
+                                // Pastikan user memiliki role siswa
+                                if (!$record->user->hasRole('Siswa')) {
+                                    $record->user->assignRole('Siswa');
+                                }
+                            }
+                            // Create user jika belum ada tapi data user diisi
+                            elseif (isset($data['user']) && !$record->user && !empty($data['user']['email'])) {
+                                $user = User::create([
+                                    'name' => $data['user']['name'],
+                                    'email' => $data['user']['email'],
+                                    'password' => $data['password'],
+                                ]);
+
+                                $user->assignRole('Siswa');
+
+                                $record->update(['user_id' => $user->id]);
+                            }
+
+                            return $record;
+                        });
+                    }),
+                Tables\Actions\DeleteAction::make()
+                    ->before(function ($record) {
+                        // Hapus user account jika ada
+                        if ($record->user) {
+                            $record->user->delete();
+                        }
+                    }),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->before(function ($records) {
+                            // Hapus user accounts untuk semua siswa yang akan dihapus
+                            foreach ($records as $record) {
+                                if ($record->user) {
+                                    $record->user->delete();
+                                }
+                            }
+                        }),
+                ]),
+            ]);
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            //
+        ];
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ListSiswas::route('/'),
+            'create' => Pages\CreateSiswa::route('/create'),
+            'view' => Pages\ViewSiswa::route('/{record}'),
+            'edit' => Pages\EditSiswa::route('/{record}/edit'),
+        ];
+    }
+
+    // Membatasi akses resource berdasarkan role
+    public static function getEloquentQuery() : Builder
+    {
+        return parent::getEloquentQuery()
+            ->when(auth()->user()->hasRole('Wali Kelas'), function ($query) {
+                $waliKelas = auth()->user()->waliKelas;
+                if ($waliKelas) {
+                    return $query->where('kelas_id', $waliKelas->kelas_id);
+                }
+                return $query->where('kelas_id', 0); // No results if not assigned to a class
+            })
+            ->when(auth()->user()->hasRole('Wali Murid'), function ($query) {
+                $waliMurid = auth()->user()->waliMurid;
+                if ($waliMurid) {
+                    return $query->where('id', $waliMurid->siswa_id);
+                }
+                return $query->where('id', 0); // No results if not linked to a student
+            });
+    }
+}
+
+
+
+/////ListSiswas//////
+
+protected static string $resource = SiswaResource::class;
+
+    protected function handleRecordCreation(array $data): Model
+    {
+        return DB::transaction(function () use ($data) {
+            // Cek apakah user ingin membuat akun
+            $createUserAccount = $data['create_user_account'] ?? false;
+
+            // Hapus field yang tidak diperlukan untuk model Siswa
+            unset($data['user']);
+            unset($data['password']);
+            unset($data['create_user_account']);
+
+            // Buat record siswa
+            $siswa = static::getModel()::create($data);
+
+            // Buat user account jika diminta
+            if ($createUserAccount) {
+                $userData = $this->form->getState()['user'] ?? [];
+                $password = $this->form->getState()['password'] ?? '';
+
+                if (!empty($userData['email'])) {
+                    $user = User::create([
+                        'name' => $userData['name'],
+                        'email' => $userData['email'],
+                        'password' => $password,
+                    ]);
+
+                    // Assign role Siswa
+                    $user->assignRole('Siswa');
+
+                    // Update siswa dengan user_id
+                    $siswa->update(['user_id' => $user->id]);
+                }
+            }
+
+            return $siswa;
+        });
+    }
+
+    protected function getRedirectUrl(): string
+    {
+        return $this->getResource()::getUrl('index');
+    }

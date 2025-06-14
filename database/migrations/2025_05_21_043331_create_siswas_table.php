@@ -21,6 +21,7 @@ return new class extends Migration
             $table->date('tanggal_lahir');
             $table->string('foto')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->foreignId('user_id')->constrained('users');
             $table->timestamps();
         });
     }

@@ -19,7 +19,8 @@ class Siswa extends Model
         'alamat',
         'tanggal_lahir',
         'foto',
-        'is_active'
+        'is_active',
+        'user_id',
     ];
 
     protected $casts = [
@@ -45,5 +46,9 @@ class Siswa extends Model
     public function izin(): HasMany
     {
         return $this->hasMany(Izin::class);
+    }
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }

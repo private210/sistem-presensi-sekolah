@@ -24,8 +24,8 @@ class SiswaResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('nisn')
-                    ->label('NISN')
+                Forms\Components\TextInput::make('nis')
+                    ->label('NIS')
                     ->required()
                     ->unique(ignoreRecord: true)
                     ->maxLength(20),
@@ -87,8 +87,8 @@ class SiswaResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('nisn')
-                    ->label('NISN')
+                Tables\Columns\TextColumn::make('nis')
+                    ->label('NIS')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('nama_lengkap')
                     ->label('Nama Lengkap')
@@ -99,9 +99,6 @@ class SiswaResource extends Resource
                 Tables\Columns\TextColumn::make('jenis_kelamin')
                     ->label('Jenis Kelamin')
                     ->formatStateUsing(fn(string $state): string => $state === 'L' ? 'Laki-laki' : 'Perempuan'),
-                Tables\Columns\ImageColumn::make('foto')
-                    ->label('Foto')
-                    ->circular(),
                 Tables\Columns\IconColumn::make('is_active')
                     ->label('Status')
                     ->boolean(),
