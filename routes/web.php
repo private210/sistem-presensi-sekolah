@@ -6,6 +6,9 @@ use App\Http\Controllers\ExportController;
 Route::get('/', function () {
     return redirect('/admin/login');
 });
+// Route::get('/', function () {
+//     return view('home');
+// });
 Route::middleware(['auth'])->group(function () {
 
     // Export untuk Kepala Sekolah

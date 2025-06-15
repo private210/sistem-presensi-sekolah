@@ -39,15 +39,45 @@ class ExportController extends Controller
 
         $data = $query->get();
 
+        // Find wali kelas dengan logika yang sama seperti PDF export
+        $wali_kelas = null;
+        $all_wali_kelas = collect();
+
+        if ($kelas_id) {
+            // Jika export untuk kelas tertentu
+            $wali_kelas = WaliKelas::with('user')
+                ->where('kelas_id', $kelas_id)
+                ->where('is_active', true)
+                ->first();
+        } else {
+            // Jika export semua kelas, ambil semua wali kelas yang terlibat
+            $kelas_ids = $data->pluck('kelas_id')->unique();
+            $all_wali_kelas = WaliKelas::with(['user', 'kelas'])
+                ->whereIn('kelas_id', $kelas_ids)
+                ->where('is_active', true)
+                ->get();
+
+            // Jika hanya ada 1 kelas dalam data, ambil wali kelasnya
+            if ($kelas_ids->count() == 1) {
+                $wali_kelas = $all_wali_kelas->first();
+                $kelas = Kelas::find($kelas_ids->first());
+            }
+        }
+
+        // Find kepala sekolah
+        $kepala_sekolah = KepalaSekolah::with('user')
+            ->where('is_active', true)
+            ->first();
+
         // Generate file name
         $fileName = 'rekap_presensi_';
         $fileName .= $kelas ? $kelas->nama_kelas . '_' : 'semua_kelas_';
         $fileName .= Carbon::parse($tanggal_mulai)->format('d-m-Y') . '_sd_' . Carbon::parse($tanggal_selesai)->format('d-m-Y');
         $fileName .= '.xlsx';
 
-        // Return Excel file
+        // Return Excel file dengan data kepala sekolah dan wali kelas
         return Excel::download(
-            new RekapWaliKelasExport($data, $tanggal_mulai, $tanggal_selesai, $kelas),
+            new RekapWaliKelasExport($data, $tanggal_mulai, $tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah),
             $fileName
         );
     }
@@ -80,7 +110,7 @@ class ExportController extends Controller
             $jumlah_hadir = $studentData->where('status', 'Hadir')->count();
             $jumlah_sakit = $studentData->where('status', 'Sakit')->count();
             $jumlah_izin = $studentData->where('status', 'Izin')->count();
-            $jumlah_alpha = $studentData->where('status', 'Tanpa Keterangan')->count();
+            $jumlah_alpha = $studentData->where('status', 'Alpa')->count();
 
             $percentage = $jumlah_hari > 0 ? ($jumlah_hadir / $jumlah_hari) * 100 : 0;
             $keterangan = 'Sangat Kurang';
@@ -104,11 +134,27 @@ class ExportController extends Controller
 
         // Find wali kelas (class teacher) for the current class
         $wali_kelas = null;
-        if ($kelas) {
+        $all_wali_kelas = collect(); // Untuk menyimpan semua wali kelas jika export semua kelas
+
+        if ($kelas_id) {
+            // Jika export untuk kelas tertentu
             $wali_kelas = WaliKelas::with('user')
                 ->where('kelas_id', $kelas_id)
                 ->where('is_active', true)
                 ->first();
+        } else {
+            // Jika export semua kelas, ambil semua wali kelas yang terlibat
+            $kelas_ids = $data->pluck('kelas_id')->unique();
+            $all_wali_kelas = WaliKelas::with(['user', 'kelas'])
+                ->whereIn('kelas_id', $kelas_ids)
+                ->where('is_active', true)
+                ->get();
+
+            // Jika hanya ada 1 kelas dalam data, ambil wali kelasnya
+            if ($kelas_ids->count() == 1) {
+                $wali_kelas = $all_wali_kelas->first();
+                $kelas = Kelas::find($kelas_ids->first());
+            }
         }
 
         // Find kepala sekolah (school principal)
@@ -131,6 +177,7 @@ class ExportController extends Controller
             'kelas' => $kelas,
             'exported_at' => Carbon::now(),
             'wali_kelas' => $wali_kelas,
+            'all_wali_kelas' => $all_wali_kelas, // Kirim semua wali kelas jika export semua kelas
             'kepala_sekolah' => $kepala_sekolah,
         ]);
 
@@ -176,12 +223,17 @@ class ExportController extends Controller
 
             $kelas = $waliKelas->kelas;
 
+            // Find kepala sekolah
+            $kepala_sekolah = KepalaSekolah::with('user')
+                ->where('is_active', true)
+                ->first();
+
             $filename = 'rekap-presensi-' . str_replace(' ', '-', strtolower($kelas->nama_kelas)) . '-' .
                 Carbon::parse($request->tanggal_mulai)->format('Y-m-d') . '-to-' .
                 Carbon::parse($request->tanggal_selesai)->format('Y-m-d') . '.xlsx';
 
             return Excel::download(
-                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas),
+                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $waliKelas, $kepala_sekolah),
                 $filename
             );
         } catch (\Exception $e) {
@@ -224,12 +276,23 @@ class ExportController extends Controller
             $siswa = $waliMurid->siswa;
             $kelas = $siswa->kelas;
 
+            // Find wali kelas untuk kelas ini
+            $wali_kelas = WaliKelas::with('user')
+                ->where('kelas_id', $kelas->id)
+                ->where('is_active', true)
+                ->first();
+
+            // Find kepala sekolah
+            $kepala_sekolah = KepalaSekolah::with('user')
+                ->where('is_active', true)
+                ->first();
+
             $filename = 'rekap-presensi-' . str_replace(' ', '-', strtolower($siswa->nama_lengkap)) . '-' .
                 Carbon::parse($request->tanggal_mulai)->format('Y-m-d') . '-to-' .
                 Carbon::parse($request->tanggal_selesai)->format('Y-m-d') . '.xlsx';
 
             return Excel::download(
-                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas),
+                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah),
                 $filename
             );
         } catch (\Exception $e) {
@@ -252,7 +315,7 @@ class ExportController extends Controller
                 'tanggal_mulai' => 'required|date',
                 'tanggal_selesai' => 'required|date|after_or_equal:tanggal_mulai',
                 'kelas_id' => 'nullable|exists:kelas,id',
-                'status' => 'nullable|in:Hadir,Izin,Sakit,Tanpa Keterangan',
+                'status' => 'nullable|in:Hadir,Izin,Sakit,Alpa',
             ]);
 
             $query = Presensi::with(['siswa', 'kelas'])
@@ -277,13 +340,29 @@ class ExportController extends Controller
 
             $kelas = $request->kelas_id ? Kelas::find($request->kelas_id) : null;
 
-            // Find wali kelas untuk kelas yang dipilih (jika ada)
+            // Find wali kelas dengan logika yang sama seperti exportKepalaSekolah
             $wali_kelas = null;
-            if ($kelas) {
+            $all_wali_kelas = collect();
+
+            if ($request->kelas_id) {
+                // Jika export untuk kelas tertentu
                 $wali_kelas = WaliKelas::with('user')
-                    ->where('kelas_id', $kelas->id)
+                    ->where('kelas_id', $request->kelas_id)
                     ->where('is_active', true)
                     ->first();
+            } else {
+                // Jika export semua kelas, ambil semua wali kelas yang terlibat
+                $kelas_ids = $data->pluck('kelas_id')->unique();
+                $all_wali_kelas = WaliKelas::with(['user', 'kelas'])
+                    ->whereIn('kelas_id', $kelas_ids)
+                    ->where('is_active', true)
+                    ->get();
+
+                // Jika hanya ada 1 kelas dalam data, ambil wali kelasnya
+                if ($kelas_ids->count() == 1) {
+                    $wali_kelas = $all_wali_kelas->first();
+                    $kelas = Kelas::find($kelas_ids->first());
+                }
             }
 
             // Find kepala sekolah
@@ -342,8 +421,38 @@ class ExportController extends Controller
                 ->where('is_active', true)
                 ->first();
 
+            // Process data untuk grouping
+            $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) {
+                $presensi = $studentData->first();
+                $jumlah_hari = $studentData->count();
+                $jumlah_hadir = $studentData->where('status', 'Hadir')->count();
+                $jumlah_sakit = $studentData->where('status', 'Sakit')->count();
+                $jumlah_izin = $studentData->where('status', 'Izin')->count();
+                $jumlah_alpha = $studentData->where('status', 'Alpa')->count();
+
+                $percentage = $jumlah_hari > 0 ? ($jumlah_hadir / $jumlah_hari) * 100 : 0;
+                $keterangan = 'Sangat Kurang';
+                if ($percentage >= 90) $keterangan = 'Baik';
+                elseif ($percentage >= 80) $keterangan = 'Cukup';
+                elseif ($percentage >= 70) $keterangan = 'Kurang';
+
+                return [
+                    'presensi' => $presensi,
+                    'siswa' => $presensi->siswa,
+                    'kelas' => $presensi->kelas,
+                    'jumlah_hari' => $jumlah_hari,
+                    'jumlah_hadir' => $jumlah_hadir,
+                    'jumlah_sakit' => $jumlah_sakit,
+                    'jumlah_izin' => $jumlah_izin,
+                    'jumlah_alpha' => $jumlah_alpha,
+                    'jumlah_total' => $jumlah_sakit + $jumlah_izin + $jumlah_alpha,
+                    'keterangan' => $keterangan
+                ];
+            })->values();
+
             $pdf = PDF::loadView('exports.rekap-presensi-pdf', [
                 'data' => $data,
+                'groupedData' => $groupedData,
                 'tanggal_mulai' => $request->tanggal_mulai,
                 'tanggal_selesai' => $request->tanggal_selesai,
                 'kelas' => $kelas,
@@ -407,8 +516,38 @@ class ExportController extends Controller
                 ->where('is_active', true)
                 ->first();
 
+            // Process data untuk grouping
+            $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) {
+                $presensi = $studentData->first();
+                $jumlah_hari = $studentData->count();
+                $jumlah_hadir = $studentData->where('status', 'Hadir')->count();
+                $jumlah_sakit = $studentData->where('status', 'Sakit')->count();
+                $jumlah_izin = $studentData->where('status', 'Izin')->count();
+                $jumlah_alpha = $studentData->where('status', 'Alpa')->count();
+
+                $percentage = $jumlah_hari > 0 ? ($jumlah_hadir / $jumlah_hari) * 100 : 0;
+                $keterangan = 'Sangat Kurang';
+                if ($percentage >= 90) $keterangan = 'Baik';
+                elseif ($percentage >= 80) $keterangan = 'Cukup';
+                elseif ($percentage >= 70) $keterangan = 'Kurang';
+
+                return [
+                    'presensi' => $presensi,
+                    'siswa' => $presensi->siswa,
+                    'kelas' => $presensi->kelas,
+                    'jumlah_hari' => $jumlah_hari,
+                    'jumlah_hadir' => $jumlah_hadir,
+                    'jumlah_sakit' => $jumlah_sakit,
+                    'jumlah_izin' => $jumlah_izin,
+                    'jumlah_alpha' => $jumlah_alpha,
+                    'jumlah_total' => $jumlah_sakit + $jumlah_izin + $jumlah_alpha,
+                    'keterangan' => $keterangan
+                ];
+            })->values();
+
             $pdf = PDF::loadView('exports.rekap-presensi-pdf', [
                 'data' => $data,
+                'groupedData' => $groupedData,
                 'tanggal_mulai' => $request->tanggal_mulai,
                 'tanggal_selesai' => $request->tanggal_selesai,
                 'kelas' => $kelas,
@@ -443,7 +582,7 @@ class ExportController extends Controller
                 'tanggal_mulai' => 'required|date',
                 'tanggal_selesai' => 'required|date|after_or_equal:tanggal_mulai',
                 'kelas_id' => 'nullable|exists:kelas,id',
-                'status' => 'nullable|in:Hadir,Izin,Sakit,Tanpa Keterangan',
+                'status' => 'nullable|in:Hadir,Izin,Sakit,Alpa',
             ]);
 
             $query = Presensi::with(['siswa', 'kelas'])
@@ -470,11 +609,27 @@ class ExportController extends Controller
 
             // Find wali kelas untuk kelas yang dipilih (jika ada)
             $wali_kelas = null;
-            if ($kelas) {
+            $all_wali_kelas = collect();
+
+            if ($request->kelas_id) {
+                // Jika export untuk kelas tertentu
                 $wali_kelas = WaliKelas::with('user')
-                    ->where('kelas_id', $kelas->id)
+                    ->where('kelas_id', $request->kelas_id)
                     ->where('is_active', true)
                     ->first();
+            } else {
+                // Jika export semua kelas, ambil semua wali kelas yang terlibat
+                $kelas_ids = $data->pluck('kelas_id')->unique();
+                $all_wali_kelas = WaliKelas::with(['user', 'kelas'])
+                    ->whereIn('kelas_id', $kelas_ids)
+                    ->where('is_active', true)
+                    ->get();
+
+                // Jika hanya ada 1 kelas dalam data, ambil wali kelasnya
+                if ($kelas_ids->count() == 1) {
+                    $wali_kelas = $all_wali_kelas->first();
+                    $kelas = Kelas::find($kelas_ids->first());
+                }
             }
 
             // Find kepala sekolah
@@ -482,12 +637,43 @@ class ExportController extends Controller
                 ->where('is_active', true)
                 ->first();
 
+            // Process data untuk grouping
+            $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) {
+                $presensi = $studentData->first();
+                $jumlah_hari = $studentData->count();
+                $jumlah_hadir = $studentData->where('status', 'Hadir')->count();
+                $jumlah_sakit = $studentData->where('status', 'Sakit')->count();
+                $jumlah_izin = $studentData->where('status', 'Izin')->count();
+                $jumlah_alpha = $studentData->where('status', 'Alpa')->count();
+
+                $percentage = $jumlah_hari > 0 ? ($jumlah_hadir / $jumlah_hari) * 100 : 0;
+                $keterangan = 'Sangat Kurang';
+                if ($percentage >= 90) $keterangan = 'Baik';
+                elseif ($percentage >= 80) $keterangan = 'Cukup';
+                elseif ($percentage >= 70) $keterangan = 'Kurang';
+
+                return [
+                    'presensi' => $presensi,
+                    'siswa' => $presensi->siswa,
+                    'kelas' => $presensi->kelas,
+                    'jumlah_hari' => $jumlah_hari,
+                    'jumlah_hadir' => $jumlah_hadir,
+                    'jumlah_sakit' => $jumlah_sakit,
+                    'jumlah_izin' => $jumlah_izin,
+                    'jumlah_alpha' => $jumlah_alpha,
+                    'jumlah_total' => $jumlah_sakit + $jumlah_izin + $jumlah_alpha,
+                    'keterangan' => $keterangan
+                ];
+            })->values();
+
             $pdf = PDF::loadView('exports.rekap-presensi-pdf', [
                 'data' => $data,
+                'groupedData' => $groupedData,
                 'tanggal_mulai' => $request->tanggal_mulai,
                 'tanggal_selesai' => $request->tanggal_selesai,
                 'kelas' => $kelas,
                 'wali_kelas' => $wali_kelas,
+                'all_wali_kelas' => $all_wali_kelas,
                 'kepala_sekolah' => $kepala_sekolah,
             ]);
 
