@@ -2,14 +2,16 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\KelasResource\Pages;
-use App\Models\Kelas;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables;
+use App\Models\Kelas;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
+use Filament\Resources\Resource;
+use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use App\Filament\Resources\KelasResource\Pages;
 
 class KelasResource extends Resource
 {
@@ -81,6 +83,71 @@ class KelasResource extends Resource
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
+                // Bulk action untuk mengaktifkan kelas
+                Tables\Actions\BulkAction::make('activate')
+                ->label('Aktifkan Kelas')
+                ->icon('heroicon-o-check-circle')
+                ->color('success')
+                ->action(function (Collection $records) {
+                    $count = $records->count();
+                    $records->each(function ($record) {
+                        $record->update(['is_active' => true]);
+                    });
+
+                    Notification::make()
+                        ->title('Berhasil mengaktifkan ' . $count . ' kelas')
+                        ->success()
+                        ->send();
+                })
+                ->deselectRecordsAfterCompletion()
+                ->requiresConfirmation()
+                ->modalHeading('Aktifkan Kelas')
+                ->modalDescription('Apakah Anda yakin ingin mengaktifkan kelas yang dipilih?')
+                ->modalSubmitActionLabel('Ya, Aktifkan'),
+
+            // Bulk action untuk menonaktifkan kelas
+            Tables\Actions\BulkAction::make('deactivate')
+                ->label('Nonaktifkan Kelas')
+                ->icon('heroicon-o-x-circle')
+                ->color('danger')
+                ->action(function (Collection $records) {
+                    $count = $records->count();
+                    $records->each(function ($record) {
+                        $record->update(['is_active' => false]);
+                    });
+
+                    Notification::make()
+                        ->title('Berhasil menonaktifkan ' . $count . ' kelas')
+                        ->success()
+                        ->send();
+                })
+                ->deselectRecordsAfterCompletion()
+                ->requiresConfirmation()
+                ->modalHeading('Nonaktifkan Kelas')
+                ->modalDescription('Apakah Anda yakin ingin menonaktifkan kelas yang dipilih?')
+                ->modalSubmitActionLabel('Ya, Nonaktifkan'),
+
+            // Bulk action untuk toggle status (alternatif)
+            Tables\Actions\BulkAction::make('toggle_status')
+                ->label('Toggle Status')
+                ->icon('heroicon-o-arrow-path')
+                ->color('warning')
+                ->action(function (Collection $records) {
+                    $count = $records->count();
+                    $records->each(function ($record) {
+                        $record->update(['is_active' => !$record->is_active]);
+                    });
+
+                    Notification::make()
+                        ->title('Berhasil mengubah status ' . $count . ' kelas')
+                        ->success()
+                        ->send();
+                })
+                ->deselectRecordsAfterCompletion()
+                ->requiresConfirmation()
+                ->modalHeading('Toggle Status Kelas')
+                ->modalDescription('Apakah Anda yakin ingin mengubah status kelas yang dipilih?')
+                ->modalSubmitActionLabel('Ya, Ubah Status'),
             ]);
     }
 
