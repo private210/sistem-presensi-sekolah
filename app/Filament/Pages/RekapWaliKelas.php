@@ -17,6 +17,7 @@ use Filament\Tables\Grouping\Group;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\RekapWaliKelasExport;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Tables\Actions\BulkAction;
 use Filament\Tables\Actions\ViewAction;
@@ -50,7 +51,9 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
     public $tanggal_mulai;
     public $tanggal_selesai;
     public $kelas_id;
-    public $pertemuan_ke = null; // Tambahan untuk filter pertemuan
+    public $pertemuan_ke = null;
+    public $periode_type = 'bulan'; // Default ke bulan
+    public $selected_semester;
 
     public function mount(): void
     {
@@ -59,8 +62,8 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
             abort(403, 'Anda tidak memiliki akses ke halaman ini');
         }
 
-        $this->tanggal_mulai = Carbon::now()->startOfMonth()->format('Y-m-d');
-        $this->tanggal_selesai = Carbon::now()->endOfMonth()->format('Y-m-d');
+        // Set default periode
+        $this->setPeriodeDefaults();
 
         // Set default kelas for wali kelas
         if (auth()->user()->hasRole('Wali Kelas')) {
@@ -70,28 +73,86 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
             }
         }
 
-        // Tidak set pertemuan default, tampilkan semua data
         $this->pertemuan_ke = null;
+    }
+
+    protected function setPeriodeDefaults(): void
+    {
+        if ($this->periode_type === 'semester') {
+            // Tentukan semester saat ini
+            $currentMonth = Carbon::now()->month;
+            $currentYear = Carbon::now()->year;
+
+            if ($currentMonth >= 7 && $currentMonth <= 12) {
+                // Semester Ganjil (Juli - Desember)
+                $this->tanggal_mulai = Carbon::create($currentYear, 7, 1)->format('Y-m-d');
+                $this->tanggal_selesai = Carbon::create($currentYear, 12, 31)->format('Y-m-d');
+                $this->selected_semester = 'ganjil';
+            } else {
+                // Semester Genap (Januari - Juni)
+                $this->tanggal_mulai = Carbon::create($currentYear, 1, 1)->format('Y-m-d');
+                $this->tanggal_selesai = Carbon::create($currentYear, 6, 30)->format('Y-m-d');
+                $this->selected_semester = 'genap';
+            }
+        } else {
+            // Default untuk bulan
+            $this->tanggal_mulai = Carbon::now()->startOfMonth()->format('Y-m-d');
+            $this->tanggal_selesai = Carbon::now()->endOfMonth()->format('Y-m-d');
+        }
     }
 
     public function form(Form $form): Form
     {
         return $form
             ->schema([
-                Grid::make(3) // Ubah kembali ke 3 karena menghapus field pertemuan
+                Grid::make(4)
                     ->schema([
+                        Radio::make('periode_type')
+                            ->label('Periode')
+                            ->options([
+                                'bulan' => 'Per Bulan',
+                                'semester' => 'Per Semester',
+                            ])
+                            ->default($this->periode_type)
+                            ->reactive()
+                            ->afterStateUpdated(function ($state) {
+                                $this->periode_type = $state;
+                                $this->setPeriodeDefaults();
+                            }),
                         DatePicker::make('tanggal_mulai')
                             ->label('Dari Tanggal')
                             ->required()
                             ->default($this->tanggal_mulai)
                             ->reactive()
+                            ->visible(fn($get) => $get('periode_type') === 'bulan')
                             ->afterStateUpdated(fn($state) => $this->tanggal_mulai = $state),
                         DatePicker::make('tanggal_selesai')
                             ->label('Sampai Tanggal')
                             ->required()
                             ->default($this->tanggal_selesai)
                             ->reactive()
+                            ->visible(fn($get) => $get('periode_type') === 'bulan')
                             ->afterStateUpdated(fn($state) => $this->tanggal_selesai = $state),
+                        Select::make('semester')
+                            ->label('Pilih Semester')
+                            ->options([
+                                'ganjil' => 'Semester Ganjil (Juli - Desember)',
+                                'genap' => 'Semester Genap (Januari - Juni)',
+                            ])
+                            ->default($this->selected_semester)
+                            ->visible(fn($get) => $get('periode_type') === 'semester')
+                            ->reactive()
+                            ->afterStateUpdated(function ($state) {
+                                $this->selected_semester = $state;
+                                $currentYear = Carbon::now()->year;
+                                if ($state === 'ganjil') {
+                                    $this->tanggal_mulai = Carbon::create($currentYear, 7, 1)->format('Y-m-d');
+                                    $this->tanggal_selesai = Carbon::create($currentYear, 12, 31)->format('Y-m-d');
+                                } else {
+                                    $this->tanggal_mulai = Carbon::create($currentYear, 1, 1)->format('Y-m-d');
+                                    $this->tanggal_selesai = Carbon::create($currentYear, 6, 30)->format('Y-m-d');
+                                }
+                            }),
                         Select::make('kelas_id')
                             ->label('Kelas')
                             ->relationship('kelas', 'nama_kelas')
@@ -151,7 +212,7 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
                     })
                     ->summarize([
                         Count::make()
-                            ->label('Total Pesensi')
+                            ->label('Total Presensi')
                             ->using(fn($query) => $query->count())
                     ]),
                 TextColumn::make('pertemuan_ke')
@@ -273,21 +334,65 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
                     ->label('Status')
                     ->collapsible(),
             ])
-            ->defaultGroup('pertemuan_ke') // Default grouping berdasarkan pertemuan
+            ->defaultGroup('pertemuan_ke')
             ->headerActions([
-                \Filament\Tables\Actions\Action::make('export_excel')
+                \Filament\Tables\Actions\Action::make('refreshData')
+                ->label('Refresh Data')
+                ->color('secondary')
+                ->icon('heroicon-o-arrow-path')
+                ->action(function () {
+                    $this->resetTable();
+                    $this->dispatch('$refresh');
+
+                    Notification::make()
+                        ->title('Data berhasil di-refresh')
+                        ->success()
+                        ->send();
+                }),
+                \Filament\Tables\Actions\Action::make('exportToExcel')
                     ->label('Export Excel')
                     ->color('success')
-                    ->icon('heroicon-o-arrow-down-tray')
-                    ->action(function () {
-                        return $this->exportToExcel();
-                    }),
-                \Filament\Tables\Actions\Action::make('export_pdf')
-                    ->label('Export PDF')
-                    ->color('danger')
                     ->icon('heroicon-o-document-arrow-down')
                     ->action(function () {
-                        return $this->exportToPdf();
+                        $params = [
+                            'tanggal_mulai' => $this->tanggal_mulai,
+                            'tanggal_selesai' => $this->tanggal_selesai,
+                            'periode_type' => $this->periode_type,
+                        ];
+
+                        if ($this->kelas_id) {
+                            $params['kelas_id'] = $this->kelas_id;
+                        }
+
+                        Notification::make()
+                            ->title('Sedang memproses export Excel...')
+                            ->info()
+                            ->send();
+
+                        $this->js('setTimeout(function() { window.location.href = "' . route('export.presensi.wali-kelas', $params) . '"; }, 1000);');
+                    }),
+
+                \Filament\Tables\Actions\Action::make('exportToPdf')
+                    ->label('Export PDF')
+                    ->color('danger')
+                    ->icon('heroicon-o-document-text')
+                    ->action(function () {
+                        $params = [
+                            'tanggal_mulai' => $this->tanggal_mulai,
+                            'tanggal_selesai' => $this->tanggal_selesai,
+                            'periode_type' => $this->periode_type,
+                        ];
+
+                        if ($this->kelas_id) {
+                            $params['kelas_id'] = $this->kelas_id;
+                        }
+
+                        Notification::make()
+                            ->title('Sedang memproses export PDF...')
+                            ->info()
+                            ->send();
+
+                        $this->js('setTimeout(function() { window.location.href = "' . route('export.presensi.wali-kelas-pdf', $params) . '"; }, 1000);');
                     }),
                 \Filament\Tables\Actions\Action::make('input_presensi')
                     ->label('Input Presensi Hari Ini')
@@ -306,7 +411,7 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
                     }),
             ])
             ->paginated([10, 25, 50, 100])
-            ->defaultPaginationPageOption(25); // Increase default pagination
+            ->defaultPaginationPageOption(25);
     }
 
     protected function getTableQuery(): Builder
@@ -333,13 +438,9 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
             $query->where('kelas_id', $this->kelas_id);
         }
 
-        // Tampilkan semua data pertemuan tanpa filter
         return $query->orderBy('pertemuan_ke')->orderBy('siswa_id')->orderBy('tanggal_presensi', 'desc');
     }
 
-    /**
-     * Mendapatkan nomor pertemuan terbaru
-     */
     protected function getLatestPertemuan(): ?int
     {
         $query = Presensi::query()
@@ -349,7 +450,6 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
             $query->where('kelas_id', $this->kelas_id);
         }
 
-        // Filter berdasarkan role
         if (auth()->user()->hasRole('Wali Kelas')) {
             $waliKelas = auth()->user()->waliKelas;
             if ($waliKelas) {
@@ -360,9 +460,6 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
         return $query->max('pertemuan_ke');
     }
 
-    /**
-     * Mendapatkan daftar pertemuan yang tersedia
-     */
     protected function getAvailablePertemuan(): array
     {
         $query = Presensi::query()
@@ -372,7 +469,6 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
             $query->where('kelas_id', $this->kelas_id);
         }
 
-        // Filter berdasarkan role
         if (auth()->user()->hasRole('Wali Kelas')) {
             $waliKelas = auth()->user()->waliKelas;
             if ($waliKelas) {
@@ -394,18 +490,11 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
         return $options;
     }
 
-    /**
-     * Menentukan apakah harus menampilkan pertemuan terbaru secara default
-     */
     protected function shouldShowLatestByDefault(): bool
     {
-        // Tampilkan pertemuan terbaru jika user adalah wali kelas
         return auth()->user()->hasRole('Wali Kelas');
     }
 
-    /**
-     * Mendapatkan daftar siswa yang tidak hadir pada pertemuan tertentu
-     */
     public function getSiswaTidakHadir($pertemuan = null): Collection
     {
         $pertemuan = $pertemuan ?? $this->getLatestPertemuan();
@@ -414,23 +503,17 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
             return collect();
         }
 
-        // Dapatkan semua siswa di kelas
         $allSiswa = Siswa::where('kelas_id', $this->kelas_id)->get();
 
-        // Dapatkan siswa yang sudah presensi pada pertemuan ini
         $siswaHadir = Presensi::where('kelas_id', $this->kelas_id)
             ->where('pertemuan_ke', $pertemuan)
             ->whereBetween('tanggal_presensi', [$this->tanggal_mulai, $this->tanggal_selesai])
             ->pluck('siswa_id')
             ->toArray();
 
-        // Return siswa yang belum presensi
         return $allSiswa->whereNotIn('id', $siswaHadir);
     }
 
-    /**
-     * Mendapatkan ringkasan per pertemuan
-     */
     public function getRingkasanPerPertemuan(): array
     {
         $query = $this->getTableQuery();
@@ -466,7 +549,7 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
         $filename = 'rekap-presensi-' . Carbon::now()->format('Y-m-d-H-i-s') . '.xlsx';
 
         return Excel::download(
-            new RekapWaliKelasExport($data),
+            new RekapWaliKelasExport($data, $this->tanggal_mulai, $this->tanggal_selesai, null, null, null, $this->periode_type),
             $filename
         );
     }
@@ -483,12 +566,12 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
             return;
         }
 
-        // Implementation for PDF export using DomPDF or similar
         $pdf = PDF::loadView('exports.rekap-presensi-pdf', [
             'data' => $data,
             'tanggal_mulai' => $this->tanggal_mulai,
             'tanggal_selesai' => $this->tanggal_selesai,
             'kelas' => $this->kelas_id ? Kelas::find($this->kelas_id) : null,
+            'periode_type' => $this->periode_type,
         ]);
 
         $filename = 'rekap-presensi-' . Carbon::now()->format('Y-m-d-H-i-s') . '.pdf';
@@ -510,12 +593,11 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
         }
 
         return Excel::download(
-            new RekapWaliKelasExport($records),
+            new RekapWaliKelasExport($records, $this->tanggal_mulai, $this->tanggal_selesai, null, null, null, $this->periode_type),
             'rekap-presensi-selected-' . Carbon::now()->format('Y-m-d-H-i-s') . '.xlsx'
         );
     }
 
-    // Method untuk mendapatkan ringkasan statistik
     public function getRingkasanStats()
     {
         $query = $this->getTableQuery();
@@ -542,9 +624,6 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
         return $totalPresensi > 0 ? round(($totalHadir / $totalPresensi) * 100, 2) : 0;
     }
 
-    /**
-     * Method untuk refresh data ketika form berubah
-     */
     public function updatedTanggalMulai()
     {
         // Refresh table when date changes
@@ -558,5 +637,16 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
     public function updatedKelasId()
     {
         // Refresh table when class changes
+    }
+    public function updatedPeriodeType()
+    {
+        $this->setPeriodeDefaults();
+        // Refresh table when periode type changes
+    }
+
+    public function updatedSemester()
+    {
+        $this->setPeriodeDefaults();
+        // Refresh table when semester changes
     }
 }

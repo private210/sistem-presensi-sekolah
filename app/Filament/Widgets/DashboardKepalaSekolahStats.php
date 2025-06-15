@@ -97,7 +97,7 @@ class DashboardKepalaSekolahStats extends BaseWidget
             Stat::make('Siswa Tidak Hadir', $totalIzin + $totalSakit + $totalAlpha)
                 ->description("Izin: {$totalIzin} | Sakit: {$totalSakit} | Alpha: {$totalAlpha}")
                 ->descriptionIcon('heroicon-m-exclamation-triangle')
-                ->color($totalAlpha > ($totalIzin + $totalSakit) ? 'danger' : 'warning'),
+                ->color($totalAlpha > ($totalIzin + $totalSakit) ? 'danger' : 'info'),
         ];
     }
 

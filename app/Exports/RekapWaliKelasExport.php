@@ -30,24 +30,31 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
     protected $all_wali_kelas;
     protected $kepala_sekolah;
     protected $row_count = 0;
+    protected $periode_type;
+    protected $total_school_days;
 
-    public function __construct($data, $tanggal_mulai, $tanggal_selesai, $kelas = null, $wali_kelas = null, $kepala_sekolah = null)
+    public function __construct($data, $tanggal_mulai, $tanggal_selesai, $kelas = null, $wali_kelas = null, $kepala_sekolah = null, $periode_type = 'bulan')
     {
         $this->data = $data;
         $this->tanggal_mulai = $tanggal_mulai;
         $this->tanggal_selesai = $tanggal_selesai;
         $this->kelas = $kelas;
+        $this->periode_type = $periode_type;
+
+        // Calculate total school days untuk periode
+        $this->total_school_days = $this->calculateSchoolDays($tanggal_mulai, $tanggal_selesai);
 
         // Process data untuk grouping per siswa
         $this->groupedData = $this->data->groupBy('siswa_id')->map(function ($studentData) {
             $presensi = $studentData->first();
-            $jumlah_hari = $studentData->count();
+            $jumlah_hari_hadir = $studentData->count(); // Jumlah hari siswa ada data presensi
             $jumlah_hadir = $studentData->where('status', 'Hadir')->count();
             $jumlah_sakit = $studentData->where('status', 'Sakit')->count();
             $jumlah_izin = $studentData->where('status', 'Izin')->count();
             $jumlah_alpha = $studentData->whereIn('status', ['Alpa', 'Tanpa Keterangan'])->count();
 
-            $percentage = $jumlah_hari > 0 ? ($jumlah_hadir / $jumlah_hari) * 100 : 0;
+            // Gunakan total school days untuk periode sebagai pembanding
+            $percentage = $this->total_school_days > 0 ? ($jumlah_hadir / $this->total_school_days) * 100 : 0;
             $keterangan = 'Sangat Kurang';
             if ($percentage >= 90) $keterangan = 'Baik';
             elseif ($percentage >= 80) $keterangan = 'Cukup';
@@ -57,7 +64,7 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                 'presensi' => $presensi,
                 'siswa' => $presensi->siswa,
                 'kelas' => $presensi->kelas,
-                'jumlah_hari' => $jumlah_hari,
+                'jumlah_hari' => $this->total_school_days, // Total hari sekolah dalam periode
                 'jumlah_hadir' => $jumlah_hadir,
                 'jumlah_sakit' => $jumlah_sakit,
                 'jumlah_izin' => $jumlah_izin,
@@ -69,11 +76,10 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
 
         $this->row_count = $this->groupedData->count();
 
-        // Handle wali kelas - prioritas dari parameter yang dikirim
+        // Handle wali kelas
         if ($wali_kelas) {
             $this->wali_kelas = $wali_kelas;
         } elseif ($kelas) {
-            // Cari wali kelas berdasarkan kelas yang dipilih
             $this->wali_kelas = WaliKelas::with('user')
                 ->where('kelas_id', $kelas->id)
                 ->where('is_active', true)
@@ -84,14 +90,12 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
 
         // Handle multiple wali kelas untuk export semua kelas
         if (!$kelas && $this->data->isNotEmpty()) {
-            // Jika export semua kelas, ambil semua wali kelas yang terlibat
             $kelas_ids = $this->data->pluck('kelas_id')->unique();
             $this->all_wali_kelas = WaliKelas::with(['user', 'kelas'])
                 ->whereIn('kelas_id', $kelas_ids)
                 ->where('is_active', true)
                 ->get();
 
-            // Jika hanya ada 1 kelas dalam data, ambil wali kelasnya
             if ($kelas_ids->count() == 1 && !$this->wali_kelas) {
                 $this->wali_kelas = $this->all_wali_kelas->first();
                 $this->kelas = Kelas::find($kelas_ids->first());
@@ -100,7 +104,7 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
             $this->all_wali_kelas = collect();
         }
 
-        // Handle kepala sekolah - prioritas dari parameter yang dikirim
+        // Handle kepala sekolah
         if ($kepala_sekolah) {
             $this->kepala_sekolah = $kepala_sekolah;
         } else {
@@ -108,6 +112,44 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                 ->where('is_active', true)
                 ->first();
         }
+    }
+
+    /**
+     * Calculate total school days (weekdays) in the period
+     */
+    protected function calculateSchoolDays($start, $end)
+    {
+        $startDate = Carbon::parse($start);
+        $endDate = Carbon::parse($end);
+
+        $schoolDays = 0;
+        $current = $startDate->copy();
+
+        while ($current->lte($endDate)) {
+            // Count only weekdays (Monday to Friday)
+            if ($current->isWeekday()) {
+                $schoolDays++;
+            }
+            $current->addDay();
+        }
+
+        return $schoolDays;
+    }
+
+    /**
+     * Get period label
+     */
+    protected function getPeriodLabel()
+    {
+        if ($this->periode_type === 'semester') {
+            $startMonth = Carbon::parse($this->tanggal_mulai)->month;
+            if ($startMonth >= 7) {
+                return 'Semester Ganjil';
+            } else {
+                return 'Semester Genap';
+            }
+        }
+        return 'Bulanan';
     }
 
     public function collection()
@@ -135,19 +177,16 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
         return 'Rekap Presensi';
     }
 
-    // Helper method to get wali kelas name
+    // Helper methods remain the same
     private function getWaliKelasName()
     {
         if ($this->wali_kelas) {
-            // Try accessing through user relationship first
             if ($this->wali_kelas->user && $this->wali_kelas->user->name) {
                 return $this->wali_kelas->user->name;
             }
-            // Fallback to direct name field if exists
             if (isset($this->wali_kelas->nama_lengkap)) {
                 return $this->wali_kelas->nama_lengkap;
             }
-            // Another fallback
             if (isset($this->wali_kelas->name)) {
                 return $this->wali_kelas->name;
             }
@@ -155,15 +194,12 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
         return 'NAMA WALI KELAS';
     }
 
-    // Helper method to get wali kelas NIP
     private function getWaliKelasNip()
     {
         if ($this->wali_kelas) {
-            // Try accessing through user relationship first
             if ($this->wali_kelas->user && isset($this->wali_kelas->user->nip)) {
                 return $this->wali_kelas->user->nip ?? 'N/A';
             }
-            // Fallback to direct nip field if exists
             if (isset($this->wali_kelas->nip)) {
                 return $this->wali_kelas->nip ?? 'N/A';
             }
@@ -171,19 +207,15 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
         return 'NIP WALI KELAS';
     }
 
-    // Helper method to get kepala sekolah name
     private function getKepalaSekolahName()
     {
         if ($this->kepala_sekolah) {
-            // Try accessing through user relationship first
             if ($this->kepala_sekolah->user && $this->kepala_sekolah->user->name) {
                 return $this->kepala_sekolah->user->name;
             }
-            // Fallback to direct name field if exists
             if (isset($this->kepala_sekolah->nama_lengkap)) {
                 return $this->kepala_sekolah->nama_lengkap;
             }
-            // Another fallback
             if (isset($this->kepala_sekolah->name)) {
                 return $this->kepala_sekolah->name;
             }
@@ -191,15 +223,12 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
         return config('app.school_principal_name', 'NAMA KEPALA SEKOLAH');
     }
 
-    // Helper method to get kepala sekolah NIP
     private function getKepalaSekolahNip()
     {
         if ($this->kepala_sekolah) {
-            // Try accessing through user relationship first
             if ($this->kepala_sekolah->user && isset($this->kepala_sekolah->user->nip)) {
                 return $this->kepala_sekolah->user->nip ?? 'N/A';
             }
-            // Fallback to direct nip field if exists
             if (isset($this->kepala_sekolah->nip)) {
                 return $this->kepala_sekolah->nip ?? 'N/A';
             }
@@ -216,7 +245,7 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                 // Clear any existing data
                 $sheet->removeRow(1, $sheet->getHighestRow());
 
-                // Set default font for entire worksheet
+                // Set default font
                 $sheet->getParent()->getDefaultStyle()->getFont()->setName('Arial');
                 $sheet->getParent()->getDefaultStyle()->getFont()->setSize(10);
 
@@ -245,15 +274,15 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                     ]
                 ]);
 
-                // 2. INFORMASI HEADER
-                $sheet->setCellValue('A5', 'Periode');
+                // 2. INFORMASI HEADER dengan periode type
+                $sheet->setCellValue('A5', 'Periode ' . $this->getPeriodLabel());
                 $sheet->setCellValue('C5', ':');
-                $sheet->setCellValue('D5', Carbon::parse($this->tanggal_mulai)->format('d/m/Y') . ' s/d ' . Carbon::parse($this->tanggal_selesai)->format('d/m/Y'));
+                $sheet->setCellValue('D5', Carbon::parse($this->tanggal_mulai)->translatedFormat('d F Y') . ' s/d ' . Carbon::parse($this->tanggal_selesai)->translatedFormat('d F Y'));
                 $sheet->mergeCells('D5:F5');
 
                 $sheet->setCellValue('G5', 'Dicetak pada');
                 $sheet->setCellValue('I5', ':');
-                $sheet->setCellValue('J5', Carbon::now()->format('d/m/Y H:i:s'));
+                $sheet->setCellValue('J5', Carbon::now()->translatedFormat('d F Y') . ' Pukul ' . Carbon::now()->format('H:i'));
                 $sheet->mergeCells('J5:K5');
 
                 $sheet->setCellValue('A6', 'Kelas');
@@ -266,9 +295,9 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                 $sheet->setCellValue('J6', $this->groupedData->count() . ' siswa');
                 $sheet->mergeCells('J6:K6');
 
-                $sheet->setCellValue('A7', 'Total Data');
+                $sheet->setCellValue('A7', 'Total Hari Sekolah');
                 $sheet->setCellValue('C7', ':');
-                $sheet->setCellValue('D7', $this->data->count() . ' record');
+                $sheet->setCellValue('D7', $this->total_school_days . ' hari');
                 $sheet->mergeCells('D7:F7');
 
                 $sheet->setCellValue('G7', 'Dicetak oleh');
@@ -370,13 +399,17 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                 // Add empty row for spacing
                 $sheet->getRowDimension(15)->setRowHeight(10);
 
-                // Table headers
+                // Table headers - Update label
                 $row = 16;
                 $sheet->setCellValue('A' . $row, 'No');
                 $sheet->setCellValue('B' . $row, 'Kelas');
                 $sheet->setCellValue('C' . $row, 'NIS');
                 $sheet->setCellValue('D' . $row, 'Nama Siswa');
-                $sheet->setCellValue('E' . $row, 'Jumlah hari/bulan');
+
+                // Always use "Jumlah hari/semester" as per requirement
+                $periodLabel = 'Jumlah hari/semester';
+                $sheet->setCellValue('E' . $row, $periodLabel);
+
                 $sheet->setCellValue('F' . $row, 'Jumlah Hadir');
                 $sheet->setCellValue('G' . $row, 'Jumlah Ke-tidak Hadiran');
                 $sheet->setCellValue('J' . $row, 'Jumlah Total');
@@ -399,7 +432,7 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                 $sheet->setCellValue('H' . $row, 'I');
                 $sheet->setCellValue('I' . $row, 'A');
 
-                // Style headers - apply to all header cells
+                // Style headers
                 $sheet->getStyle('A16:K17')->applyFromArray([
                     'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 10],
                     'fill' => [
@@ -433,14 +466,9 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                 $sheet->mergeCells('J16:J17');
                 $sheet->mergeCells('K16:K17');
 
-                // Set row heights for compact appearance
+                // Set row heights
                 $sheet->getRowDimension(16)->setRowHeight(30);
                 $sheet->getRowDimension(17)->setRowHeight(25);
-
-                // Set height for data rows to be more compact
-                for ($i = 18; $i < $row; $i++) {
-                    $sheet->getRowDimension($i)->setRowHeight(18);
-                }
 
                 // Fill data
                 $row = 18;
@@ -458,7 +486,7 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                     $sheet->setCellValue('J' . $row, $item['jumlah_total']);
                     $sheet->setCellValue('K' . $row, $item['keterangan']);
 
-                    // Apply zebra striping and font size
+                    // Apply zebra striping
                     if ($no % 2 == 0) {
                         $sheet->getStyle('A' . $row . ':K' . $row)->applyFromArray([
                             'fill' => [
@@ -477,7 +505,7 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                     $row++;
                 }
 
-                // Apply borders to data rows with subtle color
+                // Apply borders to data rows
                 $sheet->getStyle('A18:K' . ($row - 1))->applyFromArray([
                     'borders' => [
                         'allBorders' => [
@@ -520,18 +548,18 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                     ]
                 ]);
 
-                // Set specific column widths for compact layout
+                // Set specific column widths
                 $sheet->getColumnDimension('A')->setWidth(4);   // No
-                $sheet->getColumnDimension('B')->setWidth(10);   // Kelas
-                $sheet->getColumnDimension('C')->setWidth(8);   // NIS
+                $sheet->getColumnDimension('B')->setWidth(20);  // Kelas
+                $sheet->getColumnDimension('C')->setWidth(12);   // NIS
                 $sheet->getColumnDimension('D')->setWidth(25);  // Nama Siswa
-                $sheet->getColumnDimension('E')->setWidth(16);  // Jumlah hari/bulan
+                $sheet->getColumnDimension('E')->setWidth(18);  // Jumlah hari/periode
                 $sheet->getColumnDimension('F')->setWidth(12);  // Jumlah Hadir
                 $sheet->getColumnDimension('G')->setWidth(8);   // S
                 $sheet->getColumnDimension('H')->setWidth(8);   // I
                 $sheet->getColumnDimension('I')->setWidth(8);   // A
                 $sheet->getColumnDimension('J')->setWidth(11);  // Jumlah Total
-                $sheet->getColumnDimension('K')->setWidth(12);  // Keterangan
+                $sheet->getColumnDimension('K')->setWidth(18);  // Keterangan
 
                 // 5. FORMULA DAN TANDA TANGAN
                 $row += 2;
@@ -541,22 +569,17 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                 ]);
 
                 $row++;
-                $sheet->setCellValue('A' . $row, '% Absen rata-rata bulan ini = (Jumlah siswa dalam sebulan / Jumlah siswa x hari masuk) x 100%');
+                $periodText = $this->periode_type === 'semester' ? 'semester ini' : 'bulan ini';
+                $sheet->setCellValue('A' . $row, "% Absen rata-rata $periodText = (Jumlah siswa dalam $periodText / Jumlah siswa x hari masuk) x 100%");
 
                 // Calculate formula
                 $totalSiswa = $this->groupedData->count();
-                $startDate = Carbon::parse($this->tanggal_mulai);
-                $endDate = Carbon::parse($this->tanggal_selesai);
-                $totalDays = $startDate->diffInDaysFiltered(function ($date) {
-                    return $date->isWeekday();
-                }, $endDate) + 1;
-
                 $totalAbsences = $total_izin + $total_sakit + $total_alpha;
-                $maxAttendances = $totalSiswa * $totalDays;
+                $maxAttendances = $totalSiswa * $this->total_school_days;
                 $absentPercentage = ($maxAttendances > 0) ? ($totalAbsences / $maxAttendances) * 100 : 0;
 
                 $row++;
-                $sheet->setCellValue('A' . $row, "= ($totalAbsences / ($totalSiswa x $totalDays)) x 100% = " . number_format($absentPercentage, 1) . '%');
+                $sheet->setCellValue('A' . $row, "= ($totalAbsences / ($totalSiswa x {$this->total_school_days})) x 100% = " . number_format($absentPercentage, 1) . '%');
 
                 // 6. SIGNATURE SECTION
                 $row += 3;
@@ -565,7 +588,7 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                 if ($this->kelas && $this->wali_kelas) {
                     // Single class with wali kelas
                     $sheet->setCellValue('B' . $row, 'Mengetahui,');
-                    $sheet->setCellValue('H' . $row, config('app.school_city', 'Banjarejo') . ', ' . Carbon::now()->format('d F Y'));
+                    $sheet->setCellValue('H' . $row, config('app.school_city', 'Banjarejo') . ', ' . Carbon::now()->translatedFormat('l, d F Y'));
 
                     $row++;
                     $sheet->setCellValue('B' . $row, 'Kepala Sekolah');
@@ -625,31 +648,31 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
 
                     // Add section for multiple wali kelas
                     $row += 3;
-                    $sheet->setCellValue('A' . $row, 'Wali Kelas yang Terlibat:');
-                    $sheet->mergeCells('A' . $row . ':K' . $row);
-                    $sheet->getStyle('A' . $row)->applyFromArray([
+                    $sheet->setCellValue('B' . $row, 'Wali Kelas yang Terlibat:');
+                    $sheet->mergeCells('B' . $row . ':K' . $row);
+                    $sheet->getStyle('B' . $row)->applyFromArray([
                         'font' => ['bold' => true, 'size' => 12],
                         'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
                     ]);
 
-                    $row++;
-                    $col = 'A';
-                    $wali_per_row = 3; // 3 wali kelas per baris
+                    $row+=2;
+                    $col = 'D';
+                    $wali_per_row = 3;
                     $wali_count = 0;
 
                     foreach ($this->all_wali_kelas as $wk) {
                         if ($wali_count > 0 && $wali_count % $wali_per_row == 0) {
-                            $row += 4; // Add space between rows
-                            $col = 'A';
+                            $row += 4;
+                            $col = 'D';
                         }
 
                         $wali_name = 'NAMA WALI KELAS';
                         $wali_nip = 'NIP WALI KELAS';
                         $kelas_name = $wk->kelas->nama_kelas ?? 'Kelas';
 
-                        if ($wk->user) {
-                            $wali_name = $wk->user->name ?? $wali_name;
-                            $wali_nip = $wk->user->nip ?? $wali_nip;
+                        if ($wk->wali_kelas) {
+                            $wali_name = $wk->wali_kelas->nama_lengkap ?? $wali_name;
+                            $wali_nip = $wk->wali_kelas->nip ?? $wali_nip;
                         } elseif (isset($wk->nama_lengkap)) {
                             $wali_name = $wk->nama_lengkap;
                             $wali_nip = $wk->nip ?? $wali_nip;
@@ -663,24 +686,24 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                         ]);
 
                         // Nama wali kelas
-                        $sheet->setCellValue($col . ($row + 1), $wali_name);
-                        $sheet->getStyle($col . ($row + 1))->applyFromArray([
+                        $sheet->setCellValue($col . ($row + 4), $wali_name);
+                        $sheet->getStyle($col . ($row + 4))->applyFromArray([
                             'font' => ['bold' => true, 'underline' => true],
                             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
                         ]);
 
                         // NIP
-                        $sheet->setCellValue($col . ($row + 2), 'NIP. ' . $wali_nip);
-                        $sheet->getStyle($col . ($row + 2))->applyFromArray([
+                        $sheet->setCellValue($col . ($row + 5), 'NIP. ' . $wali_nip);
+                        $sheet->getStyle($col . ($row + 5))->applyFromArray([
                             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
                         ]);
 
-                        // Move to next column (every 3-4 columns)
+                        // Move to next column
                         $col = chr(ord($col) + 4);
                         $wali_count++;
                     }
 
-                    $row += 3; // Add final spacing
+                    $row += 3;
 
                 } else {
                     // Fallback - no specific wali kelas information
@@ -706,13 +729,13 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                 }
 
                 // Footer
-                $row += 2;
+                $row += 5;
                 $sheet->setCellValue('A' . $row, 'Keterangan: S = Sakit | I = Izin | A = Alpha (Tanpa Keterangan)');
                 $sheet->getStyle('A' . $row)->applyFromArray([
                     'font' => ['size' => 9, 'italic' => true, 'color' => ['rgb' => '64748B']]
                 ]);
 
-                // Print settings for optimal output
+                // Print settings
                 $sheet->getPageSetup()->setOrientation(PageSetup::ORIENTATION_LANDSCAPE);
                 $sheet->getPageSetup()->setPaperSize(PageSetup::PAPERSIZE_A4);
                 $sheet->getPageSetup()->setFitToWidth(1);
@@ -734,4 +757,3 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
         ];
     }
 }
-

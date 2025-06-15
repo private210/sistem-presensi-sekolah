@@ -25,6 +25,7 @@ class ExportController extends Controller
         $tanggal_mulai = $request->input('tanggal_mulai', Carbon::now()->startOfMonth()->format('Y-m-d'));
         $tanggal_selesai = $request->input('tanggal_selesai', Carbon::now()->format('Y-m-d'));
         $kelas_id = $request->input('kelas_id');
+        $periode_type = $request->input('periode_type', 'bulan');
 
         // Get data
         $query = Presensi::with(['siswa', 'kelas'])
@@ -72,12 +73,13 @@ class ExportController extends Controller
         // Generate file name
         $fileName = 'rekap_presensi_';
         $fileName .= $kelas ? $kelas->nama_kelas . '_' : 'semua_kelas_';
+        $fileName .= $periode_type === 'semester' ? 'semester_' : '';
         $fileName .= Carbon::parse($tanggal_mulai)->format('d-m-Y') . '_sd_' . Carbon::parse($tanggal_selesai)->format('d-m-Y');
         $fileName .= '.xlsx';
 
         // Return Excel file dengan data kepala sekolah dan wali kelas
         return Excel::download(
-            new RekapWaliKelasExport($data, $tanggal_mulai, $tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah),
+            new RekapWaliKelasExport($data, $tanggal_mulai, $tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah, $periode_type),
             $fileName
         );
     }
@@ -89,6 +91,7 @@ class ExportController extends Controller
         $tanggal_mulai = $request->input('tanggal_mulai', Carbon::now()->startOfMonth()->format('Y-m-d'));
         $tanggal_selesai = $request->input('tanggal_selesai', Carbon::now()->format('Y-m-d'));
         $kelas_id = $request->input('kelas_id');
+        $periode_type = $request->input('periode_type', 'bulan');
 
         // Get data
         $query = Presensi::with(['siswa', 'kelas'])
@@ -104,15 +107,18 @@ class ExportController extends Controller
         $data = $query->get();
 
         // Process the data for grouping by student
-        $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) {
+        $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) use ($tanggal_mulai, $tanggal_selesai) {
             $presensi = $studentData->first(); // Get first presensi record
-            $jumlah_hari = $studentData->count();
+
+            // Calculate total school days
+            $totalSchoolDays = $this->calculateSchoolDays($tanggal_mulai, $tanggal_selesai);
+
             $jumlah_hadir = $studentData->where('status', 'Hadir')->count();
             $jumlah_sakit = $studentData->where('status', 'Sakit')->count();
             $jumlah_izin = $studentData->where('status', 'Izin')->count();
             $jumlah_alpha = $studentData->where('status', 'Alpa')->count();
 
-            $percentage = $jumlah_hari > 0 ? ($jumlah_hadir / $jumlah_hari) * 100 : 0;
+            $percentage = $totalSchoolDays > 0 ? ($jumlah_hadir / $totalSchoolDays) * 100 : 0;
             $keterangan = 'Sangat Kurang';
             if ($percentage >= 90) $keterangan = 'Baik';
             elseif ($percentage >= 80) $keterangan = 'Cukup';
@@ -122,7 +128,7 @@ class ExportController extends Controller
                 'presensi' => $presensi,
                 'siswa' => $presensi->siswa, // Access through relationship
                 'kelas' => $presensi->kelas, // Access through relationship
-                'jumlah_hari' => $jumlah_hari,
+                'jumlah_hari' => $totalSchoolDays,
                 'jumlah_hadir' => $jumlah_hadir,
                 'jumlah_sakit' => $jumlah_sakit,
                 'jumlah_izin' => $jumlah_izin,
@@ -165,6 +171,7 @@ class ExportController extends Controller
         // Generate file name
         $fileName = 'rekap_presensi_';
         $fileName .= $kelas ? $kelas->nama_kelas . '_' : 'semua_kelas_';
+        $fileName .= $periode_type === 'semester' ? 'semester_' : '';
         $fileName .= Carbon::parse($tanggal_mulai)->format('d-m-Y') . '_sd_' . Carbon::parse($tanggal_selesai)->format('d-m-Y');
         $fileName .= '.pdf';
 
@@ -179,6 +186,7 @@ class ExportController extends Controller
             'wali_kelas' => $wali_kelas,
             'all_wali_kelas' => $all_wali_kelas, // Kirim semua wali kelas jika export semua kelas
             'kepala_sekolah' => $kepala_sekolah,
+            'periode_type' => $periode_type,
         ]);
 
         // Set paper to landscape for better table viewing
@@ -203,6 +211,8 @@ class ExportController extends Controller
                 'tanggal_mulai' => 'required|date',
                 'tanggal_selesai' => 'required|date|after_or_equal:tanggal_mulai',
             ]);
+
+            $periode_type = $request->input('periode_type', 'bulan');
 
             $waliKelas = auth()->user()->waliKelas;
             if (!$waliKelas) {
@@ -229,11 +239,12 @@ class ExportController extends Controller
                 ->first();
 
             $filename = 'rekap-presensi-' . str_replace(' ', '-', strtolower($kelas->nama_kelas)) . '-' .
+                ($periode_type === 'semester' ? 'semester-' : '') .
                 Carbon::parse($request->tanggal_mulai)->format('Y-m-d') . '-to-' .
                 Carbon::parse($request->tanggal_selesai)->format('Y-m-d') . '.xlsx';
 
             return Excel::download(
-                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $waliKelas, $kepala_sekolah),
+                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $waliKelas, $kepala_sekolah, $periode_type),
                 $filename
             );
         } catch (\Exception $e) {
@@ -256,6 +267,8 @@ class ExportController extends Controller
                 'tanggal_mulai' => 'required|date',
                 'tanggal_selesai' => 'required|date|after_or_equal:tanggal_mulai',
             ]);
+
+            $periode_type = $request->input('periode_type', 'bulan');
 
             $waliMurid = auth()->user()->waliMurid;
             if (!$waliMurid) {
@@ -288,11 +301,12 @@ class ExportController extends Controller
                 ->first();
 
             $filename = 'rekap-presensi-' . str_replace(' ', '-', strtolower($siswa->nama_lengkap)) . '-' .
+                ($periode_type === 'semester' ? 'semester-' : '') .
                 Carbon::parse($request->tanggal_mulai)->format('Y-m-d') . '-to-' .
                 Carbon::parse($request->tanggal_selesai)->format('Y-m-d') . '.xlsx';
 
             return Excel::download(
-                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah),
+                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah, $periode_type),
                 $filename
             );
         } catch (\Exception $e) {
@@ -317,6 +331,8 @@ class ExportController extends Controller
                 'kelas_id' => 'nullable|exists:kelas,id',
                 'status' => 'nullable|in:Hadir,Izin,Sakit,Alpa',
             ]);
+
+            $periode_type = $request->input('periode_type', 'bulan');
 
             $query = Presensi::with(['siswa', 'kelas'])
                 ->whereBetween('tanggal_presensi', [$request->tanggal_mulai, $request->tanggal_selesai]);
@@ -375,7 +391,7 @@ class ExportController extends Controller
                 Carbon::parse($request->tanggal_selesai)->format('Y-m-d') . '.xlsx';
 
             return Excel::download(
-                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah),
+                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah, $periode_type),
                 $filename
             );
         } catch (\Exception $e) {
@@ -397,6 +413,8 @@ class ExportController extends Controller
                 'tanggal_mulai' => 'required|date',
                 'tanggal_selesai' => 'required|date|after_or_equal:tanggal_mulai',
             ]);
+
+            $periode_type = $request->input('periode_type', 'bulan');
 
             $waliKelas = auth()->user()->waliKelas;
             if (!$waliKelas) {
@@ -422,15 +440,18 @@ class ExportController extends Controller
                 ->first();
 
             // Process data untuk grouping
-            $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) {
+            $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) use ($request) {
                 $presensi = $studentData->first();
-                $jumlah_hari = $studentData->count();
+
+                // Calculate total school days
+                $totalSchoolDays = $this->calculateSchoolDays($request->tanggal_mulai, $request->tanggal_selesai);
+
                 $jumlah_hadir = $studentData->where('status', 'Hadir')->count();
                 $jumlah_sakit = $studentData->where('status', 'Sakit')->count();
                 $jumlah_izin = $studentData->where('status', 'Izin')->count();
                 $jumlah_alpha = $studentData->where('status', 'Alpa')->count();
 
-                $percentage = $jumlah_hari > 0 ? ($jumlah_hadir / $jumlah_hari) * 100 : 0;
+                $percentage = $totalSchoolDays > 0 ? ($jumlah_hadir / $totalSchoolDays) * 100 : 0;
                 $keterangan = 'Sangat Kurang';
                 if ($percentage >= 90) $keterangan = 'Baik';
                 elseif ($percentage >= 80) $keterangan = 'Cukup';
@@ -440,7 +461,7 @@ class ExportController extends Controller
                     'presensi' => $presensi,
                     'siswa' => $presensi->siswa,
                     'kelas' => $presensi->kelas,
-                    'jumlah_hari' => $jumlah_hari,
+                    'jumlah_hari' => $totalSchoolDays,
                     'jumlah_hadir' => $jumlah_hadir,
                     'jumlah_sakit' => $jumlah_sakit,
                     'jumlah_izin' => $jumlah_izin,
@@ -458,11 +479,13 @@ class ExportController extends Controller
                 'kelas' => $kelas,
                 'wali_kelas' => $waliKelas,
                 'kepala_sekolah' => $kepala_sekolah,
+                'periode_type' => $periode_type,
             ]);
 
             $pdf->setPaper('A4', 'landscape');
 
             $filename = 'rekap-presensi-' . str_replace(' ', '-', strtolower($kelas->nama_kelas)) . '-' .
+                ($periode_type === 'semester' ? 'semester-' : '') .
                 Carbon::parse($request->tanggal_mulai)->format('Y-m-d') . '-to-' .
                 Carbon::parse($request->tanggal_selesai)->format('Y-m-d') . '.pdf';
 
@@ -486,6 +509,8 @@ class ExportController extends Controller
                 'tanggal_mulai' => 'required|date',
                 'tanggal_selesai' => 'required|date|after_or_equal:tanggal_mulai',
             ]);
+
+            $periode_type = $request->input('periode_type', 'bulan');
 
             $waliMurid = auth()->user()->waliMurid;
             if (!$waliMurid) {
@@ -517,15 +542,18 @@ class ExportController extends Controller
                 ->first();
 
             // Process data untuk grouping
-            $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) {
+            $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) use ($request) {
                 $presensi = $studentData->first();
-                $jumlah_hari = $studentData->count();
+
+                // Calculate total school days
+                $totalSchoolDays = $this->calculateSchoolDays($request->tanggal_mulai, $request->tanggal_selesai);
+
                 $jumlah_hadir = $studentData->where('status', 'Hadir')->count();
                 $jumlah_sakit = $studentData->where('status', 'Sakit')->count();
                 $jumlah_izin = $studentData->where('status', 'Izin')->count();
                 $jumlah_alpha = $studentData->where('status', 'Alpa')->count();
 
-                $percentage = $jumlah_hari > 0 ? ($jumlah_hadir / $jumlah_hari) * 100 : 0;
+                $percentage = $totalSchoolDays > 0 ? ($jumlah_hadir / $totalSchoolDays) * 100 : 0;
                 $keterangan = 'Sangat Kurang';
                 if ($percentage >= 90) $keterangan = 'Baik';
                 elseif ($percentage >= 80) $keterangan = 'Cukup';
@@ -535,7 +563,7 @@ class ExportController extends Controller
                     'presensi' => $presensi,
                     'siswa' => $presensi->siswa,
                     'kelas' => $presensi->kelas,
-                    'jumlah_hari' => $jumlah_hari,
+                    'jumlah_hari' => $totalSchoolDays,
                     'jumlah_hadir' => $jumlah_hadir,
                     'jumlah_sakit' => $jumlah_sakit,
                     'jumlah_izin' => $jumlah_izin,
@@ -553,11 +581,13 @@ class ExportController extends Controller
                 'kelas' => $kelas,
                 'wali_kelas' => $waliKelas,
                 'kepala_sekolah' => $kepala_sekolah,
+                'periode_type' => $periode_type,
             ]);
 
             $pdf->setPaper('A4', 'landscape');
 
             $filename = 'rekap-presensi-' . str_replace(' ', '-', strtolower($siswa->nama_lengkap)) . '-' .
+                ($periode_type === 'semester' ? 'semester-' : '') .
                 Carbon::parse($request->tanggal_mulai)->format('Y-m-d') . '-to-' .
                 Carbon::parse($request->tanggal_selesai)->format('Y-m-d') . '.pdf';
 
@@ -584,6 +614,8 @@ class ExportController extends Controller
                 'kelas_id' => 'nullable|exists:kelas,id',
                 'status' => 'nullable|in:Hadir,Izin,Sakit,Alpa',
             ]);
+
+            $periode_type = $request->input('periode_type', 'bulan');
 
             $query = Presensi::with(['siswa', 'kelas'])
                 ->whereBetween('tanggal_presensi', [$request->tanggal_mulai, $request->tanggal_selesai]);
@@ -638,15 +670,18 @@ class ExportController extends Controller
                 ->first();
 
             // Process data untuk grouping
-            $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) {
+            $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) use ($request) {
                 $presensi = $studentData->first();
-                $jumlah_hari = $studentData->count();
+
+                // Calculate total school days
+                $totalSchoolDays = $this->calculateSchoolDays($request->tanggal_mulai, $request->tanggal_selesai);
+
                 $jumlah_hadir = $studentData->where('status', 'Hadir')->count();
                 $jumlah_sakit = $studentData->where('status', 'Sakit')->count();
                 $jumlah_izin = $studentData->where('status', 'Izin')->count();
                 $jumlah_alpha = $studentData->where('status', 'Alpa')->count();
 
-                $percentage = $jumlah_hari > 0 ? ($jumlah_hadir / $jumlah_hari) * 100 : 0;
+                $percentage = $totalSchoolDays > 0 ? ($jumlah_hadir / $totalSchoolDays) * 100 : 0;
                 $keterangan = 'Sangat Kurang';
                 if ($percentage >= 90) $keterangan = 'Baik';
                 elseif ($percentage >= 80) $keterangan = 'Cukup';
@@ -656,7 +691,7 @@ class ExportController extends Controller
                     'presensi' => $presensi,
                     'siswa' => $presensi->siswa,
                     'kelas' => $presensi->kelas,
-                    'jumlah_hari' => $jumlah_hari,
+                    'jumlah_hari' => $totalSchoolDays,
                     'jumlah_hadir' => $jumlah_hadir,
                     'jumlah_sakit' => $jumlah_sakit,
                     'jumlah_izin' => $jumlah_izin,
@@ -675,12 +710,14 @@ class ExportController extends Controller
                 'wali_kelas' => $wali_kelas,
                 'all_wali_kelas' => $all_wali_kelas,
                 'kepala_sekolah' => $kepala_sekolah,
+                'periode_type' => $periode_type,
             ]);
 
             $pdf->setPaper('A4', 'landscape');
 
             $filename = 'rekap-presensi-general-' .
                 ($kelas ? str_replace(' ', '-', strtolower($kelas->nama_kelas)) . '-' : 'semua-kelas-') .
+                ($periode_type === 'semester' ? 'semester-' : '') .
                 Carbon::parse($request->tanggal_mulai)->format('Y-m-d') . '-to-' .
                 Carbon::parse($request->tanggal_selesai)->format('Y-m-d') . '.pdf';
 
@@ -688,5 +725,27 @@ class ExportController extends Controller
         } catch (\Exception $e) {
             return back()->with('error', 'Terjadi kesalahan saat mengekspor PDF: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Calculate total school days (weekdays only)
+     */
+    protected function calculateSchoolDays($start, $end)
+    {
+        $startDate = Carbon::parse($start);
+        $endDate = Carbon::parse($end);
+
+        $schoolDays = 0;
+        $current = $startDate->copy();
+
+        while ($current->lte($endDate)) {
+            // Count only weekdays (Monday to Friday)
+            if ($current->isWeekday()) {
+                $schoolDays++;
+            }
+            $current->addDay();
+        }
+
+        return $schoolDays;
     }
 }

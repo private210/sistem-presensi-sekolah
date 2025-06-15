@@ -10,6 +10,7 @@ use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Radio;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Tables\Actions\Action as TableAction;
@@ -38,6 +39,8 @@ class RekapKepalaSekolah extends Page implements HasTable
     public $tanggal_mulai;
     public $tanggal_selesai;
     public $kelas_id;
+    public $periode_type = 'bulan'; // Default ke bulan
+    public $selected_semester = 'current'; // Current semester by default
 
     public function mount(): void
     {
@@ -45,8 +48,31 @@ class RekapKepalaSekolah extends Page implements HasTable
             abort(403, 'Anda tidak memiliki akses ke halaman ini');
         }
 
-        $this->tanggal_mulai = Carbon::now()->startOfMonth()->format('Y-m-d');
-        $this->tanggal_selesai = Carbon::now()->format('Y-m-d');
+        // Set default berdasarkan periode type
+        $this->setPeriodeDefaults();
+    }
+
+    protected function setPeriodeDefaults(): void
+    {
+        if ($this->periode_type === 'semester') {
+            // Tentukan semester saat ini
+            $currentMonth = Carbon::now()->month;
+            $currentYear = Carbon::now()->year;
+
+            if ($currentMonth >= 7 && $currentMonth <= 12) {
+                // Semester Ganjil (Juli - Desember)
+                $this->tanggal_mulai = Carbon::create($currentYear, 7, 1)->format('Y-m-d');
+                $this->tanggal_selesai = Carbon::create($currentYear, 12, 31)->format('Y-m-d');
+            } else {
+                // Semester Genap (Januari - Juni)
+                $this->tanggal_mulai = Carbon::create($currentYear, 1, 1)->format('Y-m-d');
+                $this->tanggal_selesai = Carbon::create($currentYear, 6, 30)->format('Y-m-d');
+            }
+        } else {
+            // Default untuk bulan
+            $this->tanggal_mulai = Carbon::now()->startOfMonth()->format('Y-m-d');
+            $this->tanggal_selesai = Carbon::now()->format('Y-m-d');
+        }
     }
 
     public function table(Table $table): Table
@@ -83,7 +109,7 @@ class RekapKepalaSekolah extends Page implements HasTable
                         'Hadir' => 'success',
                         'Izin' => 'info',
                         'Sakit' => 'warning',
-                        'Tanpa Keterangan' => 'danger',
+                        'Tanpa Keterangan', 'Alpa' => 'danger',
                         default => 'gray',
                     }),
                 TextColumn::make('pertemuan_ke')
@@ -106,24 +132,58 @@ class RekapKepalaSekolah extends Page implements HasTable
                         'Izin' => 'Izin',
                         'Sakit' => 'Sakit',
                         'Tanpa Keterangan' => 'Tanpa Keterangan',
+                        'Alpa' => 'Alpa',
                     ]),
-                Filter::make('date_range')
+                Filter::make('periode_filter')
                     ->form([
+                        Radio::make('periode_type')
+                            ->label('Periode')
+                            ->options([
+                                'bulan' => 'Per Bulan',
+                                'semester' => 'Per Semester',
+                            ])
+                            ->default($this->periode_type)
+                            ->reactive()
+                            ->afterStateUpdated(function ($state) {
+                                $this->periode_type = $state;
+                                $this->setPeriodeDefaults();
+                                $this->resetTable();
+                            }),
                         DatePicker::make('tanggal_mulai')
                             ->label('Dari Tanggal')
-                            ->default($this->tanggal_mulai),
+                            ->default($this->tanggal_mulai)
+                            ->visible(fn($get) => $get('periode_type') === 'bulan'),
                         DatePicker::make('tanggal_selesai')
                             ->label('Sampai Tanggal')
-                            ->default($this->tanggal_selesai),
+                            ->default($this->tanggal_selesai)
+                            ->visible(fn($get) => $get('periode_type') === 'bulan'),
+                        Select::make('semester')
+                            ->label('Pilih Semester')
+                            ->options([
+                                'ganjil' => 'Semester Ganjil (Juli - Desember)',
+                                'genap' => 'Semester Genap (Januari - Juni)',
+                            ])
+                            ->default(fn() => Carbon::now()->month >= 7 ? 'ganjil' : 'genap')
+                            ->visible(fn($get) => $get('periode_type') === 'semester')
+                            ->afterStateUpdated(function ($state) {
+                                $currentYear = Carbon::now()->year;
+                                if ($state === 'ganjil') {
+                                    $this->tanggal_mulai = Carbon::create($currentYear, 7, 1)->format('Y-m-d');
+                                    $this->tanggal_selesai = Carbon::create($currentYear, 12, 31)->format('Y-m-d');
+                                } else {
+                                    $this->tanggal_mulai = Carbon::create($currentYear, 1, 1)->format('Y-m-d');
+                                    $this->tanggal_selesai = Carbon::create($currentYear, 6, 30)->format('Y-m-d');
+                                }
+                            }),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         return $query
                             ->when(
-                                $data['tanggal_mulai'],
+                                $data['tanggal_mulai'] ?? null,
                                 fn(Builder $query, $date): Builder => $query->whereDate('tanggal_presensi', '>=', $date),
                             )
                             ->when(
-                                $data['tanggal_selesai'],
+                                $data['tanggal_selesai'] ?? null,
                                 fn(Builder $query, $date): Builder => $query->whereDate('tanggal_presensi', '<=', $date),
                             );
                     }),
@@ -143,7 +203,6 @@ class RekapKepalaSekolah extends Page implements HasTable
             ->defaultGroup('kelas.nama_kelas')
             ->paginated([10, 25, 50, 100])
             ->headerActions([
-                // Pisahkan actions untuk menghindari konflik
                 TableAction::make('refreshData')
                     ->label('Refresh Data')
                     ->color('secondary')
@@ -157,8 +216,6 @@ class RekapKepalaSekolah extends Page implements HasTable
                             ->success()
                             ->send();
                     }),
-
-                // Export Excel - Pisah dari ActionGroup
                 TableAction::make('exportToExcel')
                     ->label('Export Excel')
                     ->color('success')
@@ -167,23 +224,20 @@ class RekapKepalaSekolah extends Page implements HasTable
                         $params = [
                             'tanggal_mulai' => $this->tanggal_mulai,
                             'tanggal_selesai' => $this->tanggal_selesai,
+                            'periode_type' => $this->periode_type,
                         ];
 
                         if ($this->kelas_id) {
                             $params['kelas_id'] = $this->kelas_id;
                         }
 
-                        // Tambahkan notification
                         Notification::make()
                             ->title('Sedang memproses export Excel...')
                             ->info()
                             ->send();
 
-                        // Redirect dengan timeout
                         $this->js('setTimeout(function() { window.location.href = "' . route('export.presensi.kepala-sekolah', $params) . '"; }, 1000);');
                     }),
-
-                // Export PDF - Pisah dari ActionGroup
                 TableAction::make('exportToPdf')
                     ->label('Export PDF')
                     ->color('danger')
@@ -192,21 +246,23 @@ class RekapKepalaSekolah extends Page implements HasTable
                         $params = [
                             'tanggal_mulai' => $this->tanggal_mulai,
                             'tanggal_selesai' => $this->tanggal_selesai,
+                            'periode_type' => $this->periode_type,
                         ];
 
                         if ($this->kelas_id) {
                             $params['kelas_id'] = $this->kelas_id;
                         }
 
-                        // Tambahkan notification
                         Notification::make()
                             ->title('Sedang memproses export PDF...')
                             ->info()
                             ->send();
 
-                        // Redirect dengan timeout
                         $this->js('setTimeout(function() { window.location.href = "' . route('export.presensi.kepala-sekolah-pdf', $params) . '"; }, 1000);');
                     }),
+            ])
+            ->bulkActions([
+                // Bulk actions if needed
             ]);
     }
 
@@ -234,24 +290,21 @@ class RekapKepalaSekolah extends Page implements HasTable
                     ->whereBetween('tanggal_presensi', [$this->tanggal_mulai, $this->tanggal_selesai]);
             },
             'presensi as total_alpha' => function ($query) {
-                $query->where('status', 'Tanpa Keterangan')
+                $query->whereIn('status', ['Tanpa Keterangan', 'Alpa'])
                     ->whereBetween('tanggal_presensi', [$this->tanggal_mulai, $this->tanggal_selesai]);
             }
         ])->get();
     }
 
-    // Method to update date filters
     public function updateDateFilters($tanggal_mulai, $tanggal_selesai, $kelas_id = null)
     {
         $this->tanggal_mulai = $tanggal_mulai;
         $this->tanggal_selesai = $tanggal_selesai;
         $this->kelas_id = $kelas_id;
 
-        // Refresh the table
         $this->resetTable();
     }
 
-    // Method untuk mendapatkan statistik keseluruhan
     public function getOverallStats()
     {
         $query = Presensi::whereBetween('tanggal_presensi', [$this->tanggal_mulai, $this->tanggal_selesai]);
@@ -265,7 +318,7 @@ class RekapKepalaSekolah extends Page implements HasTable
             'total_hadir' => $query->clone()->where('status', 'Hadir')->count(),
             'total_izin' => $query->clone()->where('status', 'Izin')->count(),
             'total_sakit' => $query->clone()->where('status', 'Sakit')->count(),
-            'total_alpha' => $query->clone()->where('status', 'Tanpa Keterangan')->count(),
+            'total_alpha' => $query->clone()->whereIn('status', ['Tanpa Keterangan', 'Alpa'])->count(),
             'total_siswa' => $query->clone()->distinct('siswa_id')->count(),
         ];
     }

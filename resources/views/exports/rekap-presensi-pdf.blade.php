@@ -237,48 +237,106 @@
         .multiple-signatures {
             margin-top: 30px;
             border: 1px solid #e2e8f0;
-            padding: 15px;
+            padding: 20px;
             background-color: #f8fafc;
+            page-break-inside: avoid;
         }
 
         .multiple-signatures-title {
             font-weight: bold;
-            margin-bottom: 10px;
-            text-align: center;
-        }
-
-        .wali-list {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-around;
-        }
-
-        .wali-item {
-            width: 30%;
-            text-align: center;
             margin-bottom: 15px;
+            text-align: center;
+            font-size: 11px;
+        }
+
+        /* New styles for table-like wali kelas layout */
+        .wali-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .wali-table td {
+            border: 1px solid #d1d5db;
+            padding: 15px;
+            vertical-align: top;
+            text-align: center;
+            width: 50%;
+        }
+
+        .wali-table .teacher-info {
+            padding: 20px 15px;
+            height: 120px;
+        }
+
+        .wali-table .teacher-info .kelas-header {
+            font-weight: bold;
+            font-size: 12px;
+            margin-bottom: 0;
+            padding: 0;
+            background-color: transparent;
+        }
+
+        .wali-table .teacher-name {
+            font-weight: bold;
+            text-decoration: underline;
+            margin-bottom: 5px;
+            font-size: 11px;
+        }
+
+        .wali-table .teacher-nip {
+            font-size: 10px;
+        }
+
+        /* For 3 or more columns */
+        .wali-table.three-cols td {
+            width: 33.33%;
+        }
+
+        .wali-table.four-cols td {
+            width: 25%;
+        }
+
+        @media print {
+            .multiple-signatures {
+                padding: 15px;
+            }
+
+            .wali-table .teacher-info {
+                height: 100px;
+                padding: 15px 10px;
+            }
         }
     </style>
 </head>
 <body>
+    <!-- HEADER SECTION -->
     <div class="header">
         <h2>REKAP PRESENSI SISWA</h2>
         <h3>{{ config('app.name', 'Sistem Presensi Sekolah') }}</h3>
     </div>
 
+    <!-- INFORMATION SECTION -->
     <div class="info-section">
         <table class="info-table">
             <tr>
                 <td class="label">Periode</td>
                 <td class="separator">:</td>
                 <td class="value">
-                    {{ $tanggal_mulai ? \Carbon\Carbon::parse($tanggal_mulai)->format('d/m/Y') : '-' }}
+                    {{ $tanggal_mulai ? \Carbon\Carbon::parse($tanggal_mulai)->translatedFormat('l, d F Y') : '-' }}
                     s/d
-                    {{ $tanggal_selesai ? \Carbon\Carbon::parse($tanggal_selesai)->format('d/m/Y') : '-' }}
+                    {{ $tanggal_selesai ? \Carbon\Carbon::parse($tanggal_selesai)->translatedFormat('l, d F Y') : '-' }}
+                    @if(isset($periode_type) && $periode_type === 'semester')
+                        @php
+                            $startMonth = \Carbon\Carbon::parse($tanggal_mulai)->month;
+                            $semesterType = $startMonth >= 7 ? 'Semester Ganjil' : 'Semester Genap';
+                        @endphp
+                        ({{ $semesterType }})
+                    @endif
                 </td>
                 <td class="label">Dicetak pada</td>
                 <td class="separator">:</td>
-                <td class="value">{{ \Carbon\Carbon::now()->format('d/m/Y H:i:s') }}</td>
+                <td class="value">{{ \Carbon\Carbon::now()->translatedFormat('l, d F Y').'  Pukul  '.\Carbon\Carbon::now()->format('H:i:s') }}</td>
             </tr>
             @if($kelas)
             <tr>
@@ -301,6 +359,7 @@
         </table>
     </div>
 
+    <!-- STATISTICS SECTION -->
     <div class="stats-section">
         <div class="stats-title">📊 Ringkasan Statistik</div>
         <table class="stats-table">
@@ -329,6 +388,7 @@
         </table>
     </div>
 
+    <!-- DETAIL DATA SECTION -->
     <div class="stats-title">📋 Data Presensi Detail</div>
     <table class="data-table">
         <thead>
@@ -337,7 +397,7 @@
                 <th rowspan="2" style="width: 10%;">Kelas</th>
                 <th rowspan="2" style="width: 12%;">NIS</th>
                 <th rowspan="2" style="width: 25%;">Nama Siswa</th>
-                <th rowspan="2" style="width: 12%;">Jumlah hari/bulan</th>
+                <th rowspan="2" style="width: 12%;">Jumlah hari/semester</th>
                 <th rowspan="2" style="width: 12%;">Jumlah Hadir</th>
                 <th colspan="3" style="width: 15%;">Jumlah Ke-tidak Hadiran</th>
                 <th rowspan="2" style="width: 10%;">Jumlah Total</th>
@@ -350,17 +410,31 @@
             </tr>
         </thead>
         <tbody>
+            @if(!isset($groupedData))
             @php
-                // Properly process the data to extract student information
-                $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) {
-                    $presensi = $studentData->first(); // Get first presensi record
-                    $jumlah_hari = $studentData->count();
+                // Process data if not already processed
+                $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) use ($tanggal_mulai, $tanggal_selesai) {
+                    $presensi = $studentData->first();
+
+                    // Calculate total school days (weekdays only)
+                    $startDate = \Carbon\Carbon::parse($tanggal_mulai);
+                    $endDate = \Carbon\Carbon::parse($tanggal_selesai);
+                    $totalSchoolDays = 0;
+                    $current = $startDate->copy();
+
+                    while ($current->lte($endDate)) {
+                        if ($current->isWeekday()) {
+                            $totalSchoolDays++;
+                        }
+                        $current->addDay();
+                    }
+
                     $jumlah_hadir = $studentData->where('status', 'Hadir')->count();
                     $jumlah_sakit = $studentData->where('status', 'Sakit')->count();
                     $jumlah_izin = $studentData->where('status', 'Izin')->count();
                     $jumlah_alpha = $studentData->where('status', 'Alpa')->count();
 
-                    $percentage = $jumlah_hari > 0 ? ($jumlah_hadir / $jumlah_hari) * 100 : 0;
+                    $percentage = $totalSchoolDays > 0 ? ($jumlah_hadir / $totalSchoolDays) * 100 : 0;
                     $keterangan = 'Sangat Kurang';
                     if ($percentage >= 90) $keterangan = 'Baik';
                     elseif ($percentage >= 80) $keterangan = 'Cukup';
@@ -368,9 +442,9 @@
 
                     return [
                         'presensi' => $presensi,
-                        'siswa' => $presensi->siswa, // Access through relationship
-                        'kelas' => $presensi->kelas, // Access through relationship
-                        'jumlah_hari' => $jumlah_hari,
+                        'siswa' => $presensi->siswa,
+                        'kelas' => $presensi->kelas,
+                        'jumlah_hari' => $totalSchoolDays,
                         'jumlah_hadir' => $jumlah_hadir,
                         'jumlah_sakit' => $jumlah_sakit,
                         'jumlah_izin' => $jumlah_izin,
@@ -380,6 +454,7 @@
                     ];
                 })->values();
             @endphp
+            @endif
 
             @forelse($groupedData as $index => $item)
                 <tr>
@@ -396,7 +471,6 @@
                     <td class="keterangan">{{ $item['keterangan'] }}</td>
                 </tr>
 
-                {{-- Page break setiap 25 baris untuk mencegah tabel terpotong --}}
                 @if(($index + 1) % 25 == 0 && !$loop->last)
                     </tbody>
                     </table>
@@ -408,7 +482,7 @@
                                 <th rowspan="2" style="width: 10%;">Kelas</th>
                                 <th rowspan="2" style="width: 12%;">NIS</th>
                                 <th rowspan="2" style="width: 25%;">Nama Siswa</th>
-                                <th rowspan="2" style="width: 12%;">Jumlah hari/bulan</th>
+                                <th rowspan="2" style="width: 12%;">Jumlah hari/semester</th>
                                 <th rowspan="2" style="width: 12%;">Jumlah Hadir</th>
                                 <th colspan="3" style="width: 15%;">Jumlah Ke-tidak Hadiran</th>
                                 <th rowspan="2" style="width: 10%;">Jumlah Total</th>
@@ -432,35 +506,36 @@
         </tbody>
     </table>
 
-    <!-- Absence rate calculation and signature section -->
+    <!-- ABSENCE RATE CALCULATION AND SIGNATURE SECTION -->
     <div class="signature-section">
         <div class="absence-formula">
             <div class="formula-title">Keterangan :</div>
             <div class="formula-content">
-                % Absen rata-rata bulan ini =
-                <span class="underline">Jumlah siswa dalam sebulan</span> x 100%<br>
-                <span style="margin-left: 180px;">Jumlah siswa x hari masuk</span>
-
                 @php
-                    // Calculate total student count
+                    // Calculate absence percentage
                     $totalSiswa = $groupedData->count();
-
-                    // Calculate total school days in the date range
                     $startDate = \Carbon\Carbon::parse($tanggal_mulai);
                     $endDate = \Carbon\Carbon::parse($tanggal_selesai);
-                    $totalDays = $startDate->diffInDaysFiltered(function (\Carbon\Carbon $date) {
-                        return $date->isWeekday(); // Only count weekdays (Monday to Friday)
-                    }, $endDate) + 1; // +1 to include the end date
+                    $totalDays = 0;
+                    $current = $startDate->copy();
 
-                    // Calculate total absences
+                    while ($current->lte($endDate)) {
+                        if ($current->isWeekday()) {
+                            $totalDays++;
+                        }
+                        $current->addDay();
+                    }
+
                     $totalAbsences = $data->whereIn('status', ['Sakit', 'Izin', 'Alpa'])->count();
-
-                    // Calculate maximum possible attendances
                     $maxAttendances = $totalSiswa * $totalDays;
-
-                    // Calculate absence percentage
                     $absentPercentage = ($maxAttendances > 0) ? ($totalAbsences / $maxAttendances) * 100 : 0;
+
+                    $periodText = isset($periode_type) && $periode_type === 'semester' ? 'semester ini' : 'bulan ini';
                 @endphp
+
+                % Absen rata-rata {{ $periodText }} =
+                <span class="underline">Jumlah siswa dalam {{ $periodText }}</span> x 100%<br>
+                <span style="margin-left: 180px;">Jumlah siswa x hari masuk</span>
 
                 <div style="margin-top: 10px; margin-left: 180px;">
                     = <span style="margin-left: 10px;">{{ $totalAbsences }}</span> x 100% = {{ number_format($absentPercentage, 1) }}%<br>
@@ -469,8 +544,9 @@
             </div>
         </div>
 
+        <!-- SIGNATURE SECTION -->
         @if($kelas && $wali_kelas)
-            {{-- Jika export untuk kelas tertentu dan ada wali kelas --}}
+            <!-- Single class with wali kelas -->
             <table class="signatures">
                 <tr>
                     <td class="signature-col">
@@ -497,8 +573,8 @@
                         <!-- Empty middle column for spacing -->
                     </td>
                     <td class="signature-col">
-                        {{ config('app.school_city', 'Banjarejo') }}, {{ \Carbon\Carbon::now()->format('d-m-Y') }}<br>
-                        Wali  {{ $kelas->nama_kelas }}
+                        {{ config('app.school_city', 'Banjarejo') }}, {{ \Carbon\Carbon::now()->translatedFormat('d F Y') }}<br>
+                        Wali {{ $kelas->nama_kelas }}
                         <div class="signature-space"></div>
                         <div class="signature-name">
                             {{ $wali_kelas->nama_lengkap }}
@@ -510,10 +586,11 @@
                 </tr>
             </table>
         @elseif(!$kelas && isset($all_wali_kelas) && $all_wali_kelas->count() > 0)
-            {{-- Jika export semua kelas dan ada multiple wali kelas --}}
+            <!-- Multiple classes -->
             <table class="signatures">
                 <tr>
                     <td colspan="3" style="text-align: center;">
+                        <div class="multiple-signatures-title">{{ config('app.school_city', 'Banjarejo') }}, {{ \Carbon\Carbon::now()->format('d-m-Y') }}</div>
                         <div>Mengetahui,</div>
                         <div>Kepala Sekolah</div>
                         <div class="signature-space"></div>
@@ -537,19 +614,48 @@
             </table>
 
             <div class="multiple-signatures">
-                <div class="multiple-signatures-title">Wali Kelas yang Terlibat:</div>
-                <div class="wali-list">
-                    @foreach($all_wali_kelas as $wk)
-                        <div class="wali-item">
-                            <strong>{{ $wk->kelas->nama_kelas }}</strong><br>
-                            {{ $wk->nama_lengkap }}<br>
-                            NIP. {{ $wk->nip ?? 'N/A' }}
-                        </div>
+                <div class="multiple-signatures-title" style="margin-bottom: 25px;">Wali Kelas yang Terlibat:</div>
+
+                @php
+                    $totalWaliKelas = $all_wali_kelas->count();
+                    $tableClass = '';
+                    $chunkedWaliKelas = collect();
+
+                    if ($totalWaliKelas <= 2) {
+                        $tableClass = '';
+                        $chunkedWaliKelas = $all_wali_kelas->chunk(2);
+                    } elseif ($totalWaliKelas <= 6) {
+                        $tableClass = 'three-cols';
+                        $chunkedWaliKelas = $all_wali_kelas->chunk(3);
+                    } else {
+                        $tableClass = 'four-cols';
+                        $chunkedWaliKelas = $all_wali_kelas->chunk(4);
+                    }
+                @endphp
+
+                <table class="wali-table {{ $tableClass }}">
+                    @foreach($chunkedWaliKelas as $rowIndex => $waliChunk)
+                        <!-- Teacher info row -->
+                        <tr>
+                            @foreach($waliChunk as $wk)
+                                <td class="teacher-info">
+                                    <div class="kelas-header">Wali {{ $wk->kelas->nama_kelas }}</div>
+                                    <div style="height: 100px;"></div>
+                                    <div class="teacher-name">{{ $wk->nama_lengkap }}</div>
+                                    <div class="teacher-nip">NIP. {{ $wk->nip ?? 'N/A' }}</div>
+                                </td>
+                            @endforeach
+                            @if($waliChunk->count() < ($totalWaliKelas <= 2 ? 2 : ($totalWaliKelas <= 6 ? 3 : 4)))
+                                @for($i = $waliChunk->count(); $i < ($totalWaliKelas <= 2 ? 2 : ($totalWaliKelas <= 6 ? 3 : 4)); $i++)
+                                    <td class="teacher-info"></td>
+                                @endfor
+                            @endif
+                        </tr>
                     @endforeach
-                </div>
+                </table>
             </div>
         @else
-            {{-- Fallback jika tidak ada wali kelas --}}
+            <!-- Fallback if no wali kelas info -->
             <table class="signatures">
                 <tr>
                     <td class="signature-col">
@@ -590,11 +696,13 @@
             </table>
         @endif
     </div>
+
+    <!-- FOOTER -->
     <div class="footer clearfix">
         <div class="footer-left">
             <strong>{{ config('app.name', 'Sistem Presensi') }}</strong><br>
             Dicetak oleh: {{ auth()->user()->name }}<br>
-            Tanggal: {{ \Carbon\Carbon::now()->format('d/m/Y H:i:s') }}
+            Tanggal: {{ \Carbon\Carbon::now()->translatedFormat('l, d F Y, H:i') }}
         </div>
         <div class="footer-right">
             <strong>Keterangan:</strong><br>
