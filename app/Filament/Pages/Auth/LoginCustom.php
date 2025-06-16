@@ -2,17 +2,14 @@
 
 namespace App\Filament\Pages\Auth;
 
-use Filament\Pages\Page;
 use Filament\Pages\Auth\Login;
 use Filament\Forms\Components\Component;
 use Filament\Forms\Components\TextInput;
-use Filament\Pages\Dashboard;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\Routing\Redirector;
 
 class LoginCustom extends Login
 {
+    protected static string $view = 'filament.pages.auth.login-custom';
 
     protected function getForms(): array
     {
@@ -39,7 +36,6 @@ class LoginCustom extends Login
             ->extraInputAttributes(['tabindex' => 1]);
     }
 
-
     protected function getCredentialsFromFormData(array $data): array
     {
         $login_type = filter_var($data['login'], FILTER_VALIDATE_EMAIL) ? 'email' : 'name';
@@ -52,9 +48,20 @@ class LoginCustom extends Login
     protected function throwFailureValidationException(): never
     {
         throw ValidationException::withMessages([
-            // 'data.login' => 'Kredensial yang diberikan tidak dapat ditemukan.',
-            // atau pesan custom lainnya
             'data.login' => 'Username atau password salah.',
         ]);
     }
+
+    // // Remove mount() method - tidak perlu inject CSS di sini
+    // // Karena CSS sudah ada di blade template
+
+    public function getHeading(): string
+    {
+        return '';
+    }
+
+    // public function hasLogo(): bool
+    // {
+    //     return false;
+    // }
 }
