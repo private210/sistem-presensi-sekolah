@@ -52,7 +52,9 @@ class LoginCustom extends Login
     protected function throwFailureValidationException(): never
     {
         throw ValidationException::withMessages([
-            'data.login' => __('filament-panels::pages/auth/login.messages.failed'),
+            // 'data.login' => 'Kredensial yang diberikan tidak dapat ditemukan.',
+            // atau pesan custom lainnya
+            'data.login' => 'Username atau password salah.',
         ]);
     }
 }

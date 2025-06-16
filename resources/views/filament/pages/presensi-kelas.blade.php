@@ -1,29 +1,41 @@
 <x-filament-panels::page>
     {{-- Holiday Alert --}}
     @if($is_holiday)
-        <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg" style="width: 35%; background: linear-gradient(135deg, #ea666632 0%, #c1323294 100%);">
-            <div class="flex items-start">
-                <div class="flex-shrink-0 mt-0.5">
-                </div>
-                <div class="ml-3 flex-1">
-                    <h3 class="text-sm font-semibold text-red-800 mb-2">🏮 Informasi Hari Libur</h3>
-                    <ul class="text-sm text-red-700 space-y-1">
+    <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg" style="width: 35%; background: linear-gradient(135deg, #ea666632 0%, #c1323294 100%);">
+        <div class="flex items-start">
+            <div class="flex-shrink-0 mt-0.5">
+            </div>
+            <div class="ml-3 flex-1">
+                <h3 class="text-sm font-semibold text-red-800 mb-2">🏮 Informasi Hari Libur</h3>
+                <ul class="text-sm text-red-700 space-y-1">
+                    <li class="flex items-start">
+                        <span class="w-2 h-2 bg-red-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                        <span>{{ $holiday_info?->nama_hari_libur }}</span>
+                    </li>
+
+                    {{-- Tampilkan range tanggal jika hari libur lebih dari 1 hari --}}
+                    @if($holiday_info && $holiday_info->tanggal_selesai && !$holiday_info->tanggal_mulai->equalTo($holiday_info->tanggal_selesai))
                         <li class="flex items-start">
                             <span class="w-2 h-2 bg-red-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                            <span>{{ $holiday_info?->nama_hari_libur }}</span>
+                            <span>📅 Periode: {{ $holiday_info->tanggal_mulai->format('d M Y') }} - {{ $holiday_info->tanggal_selesai->format('d M Y') }}</span>
                         </li>
+                    @endif
+
+                    @if($holiday_info?->keterangan)
                         <li class="flex items-start">
                             <span class="w-2 h-2 bg-red-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                            <span>{{ $holiday_info?->keterangan }}</span>
+                            <span>{{ $holiday_info->keterangan }}</span>
                         </li>
-                        <li class="flex items-start">
-                            <span class="w-2 h-2 bg-red-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                            <span>✈️  Presensi tidak dapat dilakukan pada hari libur resmi</span>
-                        </li>
-                    </ul>
-                </div>
+                    @endif
+
+                    <li class="flex items-start">
+                        <span class="w-2 h-2 bg-red-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                        <span>✈️  Presensi tidak dapat dilakukan pada hari libur resmi</span>
+                    </li>
+                </ul>
             </div>
         </div>
+    </div>
     @endif
 
     {{-- Weekend Alert --}}

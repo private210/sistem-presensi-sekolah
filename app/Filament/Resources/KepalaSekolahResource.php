@@ -55,6 +55,12 @@ class KepalaSekolahResource extends Resource
                         Forms\Components\TextInput::make('nip')
                             ->label('NIP')
                             ->maxLength(20),
+                        Forms\Components\TextInput::make('pangkat')
+                            ->label('Pangkat')
+                            ->maxLength(50),
+                        Forms\Components\TextInput::make('golongan')
+                            ->label('Golongan')
+                            ->maxLength(20),
                         Forms\Components\TextInput::make('nama_lengkap')
                             ->label('Nama Lengkap')
                             ->required()
@@ -77,6 +83,12 @@ class KepalaSekolahResource extends Resource
                 Tables\Columns\TextColumn::make('nama_lengkap')
                     ->label('Nama Lengkap')
                     ->searchable(),
+                Tables\Columns\TextColumn::make('pangkat')
+                    ->label('Pangkat')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('golongan')
+                    ->label('Golongan')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('user.email')
                     ->label('Email')
                     ->searchable(),

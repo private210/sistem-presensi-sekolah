@@ -12,6 +12,8 @@ class KepalaSekolah extends Model
     protected $fillable = [
         'user_id',
         'nip',
+        'pangkat',
+        'golongan',
         'nama_lengkap',
         'is_active'
     ];

@@ -149,7 +149,7 @@
         }
 
         .footer {
-            margin-top: 25px;
+            margin-top: 20px; /* Reduced from 25px */
             padding-top: 15px;
             border-top: 1px solid #e2e8f0;
             font-size: 9px;
@@ -183,6 +183,26 @@
             .no-print {
                 display: none;
             }
+
+            .signature-section {
+                page-break-inside: avoid;
+            }
+
+            .signature-wrapper {
+                page-break-inside: avoid;
+            }
+
+            .signature-right-bottom {
+                position: relative !important;
+                float: right !important;
+                margin-right: 100px !important;
+            }
+
+            .footer {
+                position: relative;
+                margin-top: 30px !important; /* Reduced from 100px */
+                page-break-inside: avoid;
+            }
         }
 
         .sub-header {
@@ -193,12 +213,15 @@
         }
 
         .signature-section {
-            margin-top: 50px;
+            margin-top: 30px; /* Reduced from 50px */
             page-break-inside: avoid;
+            clear: both;
+            position: relative;
         }
 
         .absence-formula {
-            margin-bottom: 30px;
+            margin-bottom: 40px; /* Reduced from 80px */
+            clear: both;
         }
 
         .absence-formula .formula-title {
@@ -214,9 +237,41 @@
             text-decoration: underline;
         }
 
+        /* Updated signature styles for better positioning */
         .signatures {
             width: 100%;
-            margin-top: 30px;
+            margin-top: 20px; /* Reduced from 30px */
+            position: relative;
+            clear: both;
+        }
+
+        .signature-right-bottom {
+            position: relative;
+            float: right;
+            text-align: center;
+            width: 300px;
+            margin-right: 120px; /* Moved 120px to the left from right edge */
+            clear: both;
+        }
+
+        .signature-space {
+            height: 50px; /* Reduced from 60px */
+            margin: 10px 0;
+        }
+
+        .signature-name {
+            font-weight: bold;
+            text-decoration: underline;
+            margin-bottom: 3px;
+        }
+
+        .signature-title {
+            font-weight: normal;
+            margin-bottom: 5px;
+        }
+
+        .signature-nip {
+            font-weight: normal;
         }
 
         .signature-col {
@@ -225,13 +280,17 @@
             text-align: center;
         }
 
-        .signature-space {
-            height: 70px;
+        /* New style for two-column signature layout */
+        .signature-table {
+            width: 100%;
+            margin-top: 20px;
         }
 
-        .signature-name {
-            font-weight: bold;
-            text-decoration: underline;
+        .signature-table td {
+            width: 50%;
+            text-align: center;
+            padding: 0 20px;
+            vertical-align: top;
         }
 
         .multiple-signatures {
@@ -240,6 +299,7 @@
             padding: 20px;
             background-color: #f8fafc;
             page-break-inside: avoid;
+            clear: both;
         }
 
         .multiple-signatures-title {
@@ -254,6 +314,7 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
+            clear: both;
         }
 
         .wali-table td {
@@ -297,6 +358,23 @@
             width: 25%;
         }
 
+        /* Ensure proper spacing between formula and signature */
+        .signature-wrapper {
+            position: relative;
+            min-height: 180px; /* Reduced from 250px */
+            clear: both;
+            margin-top: 20px;
+            display: block;
+            width: 100%;
+        }
+
+        /* Add clearfix to signature section */
+        .signature-section::after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+
         @media print {
             .multiple-signatures {
                 padding: 15px;
@@ -310,6 +388,11 @@
     </style>
 </head>
 <body>
+    @php
+        // Check if this is a wali murid export
+        $isWaliMurid = isset($is_wali_murid) && $is_wali_murid === true;
+    @endphp
+
     <!-- HEADER SECTION -->
     <div class="header">
         <h2>REKAP PRESENSI SISWA</h2>
@@ -423,9 +506,26 @@
                     $current = $startDate->copy();
 
                     while ($current->lte($endDate)) {
-                        if ($current->isWeekday()) {
+                        // Skip weekends
+                        if ($current->isWeekend()) {
+                            $current->addDay();
+                            continue;
+                        }
+
+                        // Check if it's a holiday
+                        $isHoliday = \App\Models\HariLibur::where('tanggal_mulai', '<=', $current->format('Y-m-d'))
+                            ->where(function ($query) use ($current) {
+                                $query->whereNull('tanggal_selesai')
+                                    ->where('tanggal_mulai', '=', $current->format('Y-m-d'))
+                                    ->orWhere('tanggal_selesai', '>=', $current->format('Y-m-d'));
+                            })
+                            ->exists();
+
+                        // Only count if it's not a holiday
+                        if (!$isHoliday) {
                             $totalSchoolDays++;
                         }
+
                         $current->addDay();
                     }
 
@@ -506,7 +606,8 @@
         </tbody>
     </table>
 
-    <!-- ABSENCE RATE CALCULATION AND SIGNATURE SECTION -->
+    @if(!$isWaliMurid)
+    <!-- ABSENCE RATE CALCULATION AND SIGNATURE SECTION (ONLY FOR NON-WALI MURID) -->
     <div class="signature-section">
         <div class="absence-formula">
             <div class="formula-title">Keterangan :</div>
@@ -516,18 +617,35 @@
                     $totalSiswa = $groupedData->count();
                     $startDate = \Carbon\Carbon::parse($tanggal_mulai);
                     $endDate = \Carbon\Carbon::parse($tanggal_selesai);
-                    $totalDays = 0;
+                    $totalSchoolDays = 0;
                     $current = $startDate->copy();
 
                     while ($current->lte($endDate)) {
-                        if ($current->isWeekday()) {
-                            $totalDays++;
+                        // Skip weekends
+                        if ($current->isWeekend()) {
+                            $current->addDay();
+                            continue;
                         }
+
+                        // Check if it's a holiday
+                        $isHoliday = \App\Models\HariLibur::where('tanggal_mulai', '<=', $current->format('Y-m-d'))
+                            ->where(function ($query) use ($current) {
+                                $query->whereNull('tanggal_selesai')
+                                    ->where('tanggal_mulai', '=', $current->format('Y-m-d'))
+                                    ->orWhere('tanggal_selesai', '>=', $current->format('Y-m-d'));
+                            })
+                            ->exists();
+
+                        // Only count if it's not a holiday
+                        if (!$isHoliday) {
+                            $totalSchoolDays++;
+                        }
+
                         $current->addDay();
                     }
 
                     $totalAbsences = $data->whereIn('status', ['Sakit', 'Izin', 'Alpa'])->count();
-                    $maxAttendances = $totalSiswa * $totalDays;
+                    $maxAttendances = $totalSiswa * $totalSchoolDays;
                     $absentPercentage = ($maxAttendances > 0) ? ($totalAbsences / $maxAttendances) * 100 : 0;
 
                     $periodText = isset($periode_type) && $periode_type === 'semester' ? 'semester ini' : 'bulan ini';
@@ -538,167 +656,189 @@
                 <span style="margin-left: 180px;">Jumlah siswa x hari masuk</span>
 
                 <div style="margin-top: 10px; margin-left: 180px;">
-                    = <span style="margin-left: 10px;">{{ $totalAbsences }}</span> x 100% = {{ number_format($absentPercentage, 1) }}%<br>
-                    <span style="margin-left: 10px;">{{ $totalSiswa }} x {{ $totalDays }}</span>
+                    = <span class="underline" style="margin-left: 8px;"> {{ $totalAbsences }} x 100% </span>= {{ number_format($absentPercentage, 1) }}%<br>
+                    <span style="margin-left: 15px;">{{ $totalSiswa }} x {{ $totalSchoolDays }}</span>
                 </div>
             </div>
         </div>
 
-        <!-- SIGNATURE SECTION -->
-        @if($kelas && $wali_kelas)
-            <!-- Single class with wali kelas -->
-            <table class="signatures">
-                <tr>
-                    <td class="signature-col">
-                        <div>Mengetahui,</div>
-                        <div>Kepala Sekolah</div>
-                        <div class="signature-space"></div>
-                        <div class="signature-name">
-                            @if($kepala_sekolah)
-                                {{ $kepala_sekolah->nama_lengkap }}
-                            @else
-                                {{ config('app.school_principal_name', 'NAMA KEPALA SEKOLAH') }}
-                            @endif
-                        </div>
-                        <div>
-                            NIP.
-                            @if($kepala_sekolah)
-                                {{ $kepala_sekolah->nip ?? 'N/A' }}
-                            @else
-                                {{ config('app.school_principal_nip', 'NIP KEPALA SEKOLAH') }}
-                            @endif
-                        </div>
-                    </td>
-                    <td class="signature-col">
-                        <!-- Empty middle column for spacing -->
-                    </td>
-                    <td class="signature-col">
-                        {{ config('app.school_city', 'Banjarejo') }}, {{ \Carbon\Carbon::now()->translatedFormat('d F Y') }}<br>
-                        Wali {{ $kelas->nama_kelas }}
-                        <div class="signature-space"></div>
-                        <div class="signature-name">
-                            {{ $wali_kelas->nama_lengkap }}
-                        </div>
-                        <div>
-                            NIP. {{ $wali_kelas->nip ?? 'N/A' }}
-                        </div>
-                    </td>
-                </tr>
-            </table>
-        @elseif(!$kelas && isset($all_wali_kelas) && $all_wali_kelas->count() > 0)
-            <!-- Multiple classes -->
-            <table class="signatures">
-                <tr>
-                    <td colspan="3" style="text-align: center;">
-                        <div class="multiple-signatures-title">{{ config('app.school_city', 'Banjarejo') }}, {{ \Carbon\Carbon::now()->format('d-m-Y') }}</div>
-                        <div>Mengetahui,</div>
-                        <div>Kepala Sekolah</div>
-                        <div class="signature-space"></div>
-                        <div class="signature-name">
-                            @if($kepala_sekolah)
-                                {{ $kepala_sekolah->nama_lengkap }}
-                            @else
-                                {{ config('app.school_principal_name', 'NAMA KEPALA SEKOLAH') }}
-                            @endif
-                        </div>
-                        <div>
-                            NIP.
-                            @if($kepala_sekolah)
-                                {{ $kepala_sekolah->nip ?? 'N/A' }}
-                            @else
-                                {{ config('app.school_principal_nip', 'NIP KEPALA SEKOLAH') }}
-                            @endif
-                        </div>
-                    </td>
-                </tr>
-            </table>
-
-            <div class="multiple-signatures">
-                <div class="multiple-signatures-title" style="margin-bottom: 25px;">Wali Kelas yang Terlibat:</div>
-
-                @php
-                    $totalWaliKelas = $all_wali_kelas->count();
-                    $tableClass = '';
-                    $chunkedWaliKelas = collect();
-
-                    if ($totalWaliKelas <= 2) {
-                        $tableClass = '';
-                        $chunkedWaliKelas = $all_wali_kelas->chunk(2);
-                    } elseif ($totalWaliKelas <= 6) {
-                        $tableClass = 'three-cols';
-                        $chunkedWaliKelas = $all_wali_kelas->chunk(3);
-                    } else {
-                        $tableClass = 'four-cols';
-                        $chunkedWaliKelas = $all_wali_kelas->chunk(4);
-                    }
-                @endphp
-
-                <table class="wali-table {{ $tableClass }}">
-                    @foreach($chunkedWaliKelas as $rowIndex => $waliChunk)
-                        <!-- Teacher info row -->
-                        <tr>
-                            @foreach($waliChunk as $wk)
-                                <td class="teacher-info">
-                                    <div class="kelas-header">Wali {{ $wk->kelas->nama_kelas }}</div>
-                                    <div style="height: 100px;"></div>
-                                    <div class="teacher-name">{{ $wk->nama_lengkap }}</div>
-                                    <div class="teacher-nip">NIP. {{ $wk->nip ?? 'N/A' }}</div>
-                                </td>
-                            @endforeach
-                            @if($waliChunk->count() < ($totalWaliKelas <= 2 ? 2 : ($totalWaliKelas <= 6 ? 3 : 4)))
-                                @for($i = $waliChunk->count(); $i < ($totalWaliKelas <= 2 ? 2 : ($totalWaliKelas <= 6 ? 3 : 4)); $i++)
-                                    <td class="teacher-info"></td>
-                                @endfor
-                            @endif
-                        </tr>
-                    @endforeach
+        <!-- UPDATED SIGNATURE SECTION - Better positioned without overlap -->
+        <div class="signature-wrapper">
+            @if($kelas && $wali_kelas)
+                <!-- Single class with wali kelas - Show both Kepala Sekolah and Wali Kelas -->
+                <table style="width: 100%; margin-top: 20px;">
+                    <tr>
+                        <td style="width: 50%; text-align: center; padding: 0 20px;">
+                            <div>Mengetahui,</div>
+                            <div class="signature-title">Kepala Sekolah</div>
+                            <div class="signature-space"></div>
+                            <div class="signature-name">
+                                @if(isset($kepala_sekolah) && $kepala_sekolah)
+                                    @if($kepala_sekolah->user && $kepala_sekolah->user->name)
+                                        {{ $kepala_sekolah->user->name }}
+                                    @elseif(isset($kepala_sekolah->nama_lengkap))
+                                        {{ $kepala_sekolah->nama_lengkap }}
+                                    @else
+                                        {{ config('app.school_principal_name', 'NAMA KEPALA SEKOLAH') }}
+                                    @endif
+                                @else
+                                    {{ config('app.school_principal_name', 'NAMA KEPALA SEKOLAH') }}
+                                @endif
+                            </div>
+                            <div class="signature-nip">
+                                NIP.
+                                @if(isset($kepala_sekolah) && $kepala_sekolah)
+                                    @if($kepala_sekolah->user && isset($kepala_sekolah->user->nip))
+                                        {{ $kepala_sekolah->user->nip ?? 'N/A' }}
+                                    @elseif(isset($kepala_sekolah->nip))
+                                        {{ $kepala_sekolah->nip ?? 'N/A' }}
+                                    @else
+                                        {{ config('app.school_principal_nip', 'NIP KEPALA SEKOLAH') }}
+                                    @endif
+                                @else
+                                    {{ config('app.school_principal_nip', 'NIP KEPALA SEKOLAH') }}
+                                @endif
+                            </div>
+                        </td>
+                        <td style="width: 50%; text-align: center; padding: 0 20px;">
+                            <div>{{ config('app.school_city', 'Banjarejo') }}, {{ \Carbon\Carbon::now()->translatedFormat('d F Y') }}</div>
+                            <div class="signature-title">Wali {{ $kelas->nama_kelas }}</div>
+                            <div class="signature-space"></div>
+                            <div class="signature-name">
+                                @if($wali_kelas->user && $wali_kelas->user->name)
+                                    {{ $wali_kelas->user->name }}
+                                @elseif(isset($wali_kelas->nama_lengkap))
+                                    {{ $wali_kelas->nama_lengkap }}
+                                @else
+                                    NAMA WALI KELAS
+                                @endif
+                            </div>
+                            <div class="signature-nip">
+                                NIP.
+                                @if($wali_kelas->user && isset($wali_kelas->user->nip))
+                                    {{ $wali_kelas->user->nip ?? 'N/A' }}
+                                @elseif(isset($wali_kelas->nip))
+                                    {{ $wali_kelas->nip ?? 'N/A' }}
+                                @else
+                                    N/A
+                                @endif
+                            </div>
+                        </td>
+                    </tr>
                 </table>
-            </div>
-        @else
-            <!-- Fallback if no wali kelas info -->
-            <table class="signatures">
-                <tr>
-                    <td class="signature-col">
-                        <div>Mengetahui,</div>
-                        <div>Kepala Sekolah</div>
-                        <div class="signature-space"></div>
-                        <div class="signature-name">
-                            @if($kepala_sekolah)
+            @elseif(!$kelas && isset($all_wali_kelas) && $all_wali_kelas->count() > 0)
+                <!-- Multiple classes - Right positioned - ONLY KEPALA SEKOLAH -->
+                <div class="signature-right-bottom">
+                    <div>{{ config('app.school_city', 'Banjarejo') }}, {{ \Carbon\Carbon::now()->translatedFormat('d F Y') }}</div>
+                    <div class="signature-title">Kepala Satuan Pendidikan</div>
+                    <div class="signature-title">SDN Banjarejo</div>
+                    <div class="signature-space"></div>
+                    <div class="signature-name">
+                        @if(isset($kepala_sekolah) && $kepala_sekolah)
+                            @if($kepala_sekolah->user && $kepala_sekolah->user->name)
+                                {{ $kepala_sekolah->user->name }}
+                            @elseif(isset($kepala_sekolah->nama_lengkap))
                                 {{ $kepala_sekolah->nama_lengkap }}
                             @else
                                 {{ config('app.school_principal_name', 'NAMA KEPALA SEKOLAH') }}
                             @endif
-                        </div>
-                        <div>
-                            NIP.
-                            @if($kepala_sekolah)
+                        @else
+                            {{ config('app.school_principal_name', 'NAMA KEPALA SEKOLAH') }}
+                        @endif
+                    </div>
+                    @if(isset($kepala_sekolah) && $kepala_sekolah)
+                        @php
+                            $pangkat = '';
+                            $golongan = '';
+
+                            if($kepala_sekolah->user && isset($kepala_sekolah->user->pangkat)) {
+                                $pangkat = $kepala_sekolah->user->pangkat;
+                            } elseif(isset($kepala_sekolah->pangkat)) {
+                                $pangkat = $kepala_sekolah->pangkat;
+                            } else {
+                                $pangkat = config('app.school_principal_pangkat', '');
+                            }
+
+                            if($kepala_sekolah->user && isset($kepala_sekolah->user->golongan)) {
+                                $golongan = $kepala_sekolah->user->golongan;
+                            } elseif(isset($kepala_sekolah->golongan)) {
+                                $golongan = $kepala_sekolah->golongan;
+                            } else {
+                                $golongan = config('app.school_principal_golongan', '');
+                            }
+                        @endphp
+
+                        @if($pangkat && $golongan)
+                            <div class="signature-title">{{ $pangkat }} ({{ $golongan }})</div>
+                        @endif
+                    @endif
+                    <div class="signature-nip">
+                        NIP.
+                        @if(isset($kepala_sekolah) && $kepala_sekolah)
+                            @if($kepala_sekolah->user && isset($kepala_sekolah->user->nip))
+                                {{ $kepala_sekolah->user->nip ?? 'N/A' }}
+                            @elseif(isset($kepala_sekolah->nip))
                                 {{ $kepala_sekolah->nip ?? 'N/A' }}
                             @else
                                 {{ config('app.school_principal_nip', 'NIP KEPALA SEKOLAH') }}
                             @endif
-                        </div>
-                    </td>
-                    <td class="signature-col">
-                        <!-- Empty middle column for spacing -->
-                    </td>
-                    <td class="signature-col">
-                        {{ config('app.school_city', 'Banjarejo') }}, {{ \Carbon\Carbon::now()->format('d-m-Y') }}<br>
-                        Wali Kelas
-                        <div class="signature-space"></div>
-                        <div class="signature-name">
-                            ________________________
-                        </div>
-                        <div>
-                            NIP. ________________________
-                        </div>
-                    </td>
-                </tr>
-            </table>
-        @endif
+                        @else
+                            {{ config('app.school_principal_nip', 'NIP KEPALA SEKOLAH') }}
+                        @endif
+                    </div>
+                </div>
+            @else
+                <!-- Fallback if no wali kelas info - Show both Kepala Sekolah and Wali Kelas -->
+                <table style="width: 100%; margin-top: 20px;">
+                    <tr>
+                        <td style="width: 50%; text-align: center; padding: 0 20px;">
+                            <div>Mengetahui,</div>
+                            <div class="signature-title">Kepala Sekolah</div>
+                            <div class="signature-space"></div>
+                            <div class="signature-name">
+                                @if(isset($kepala_sekolah) && $kepala_sekolah)
+                                    @if($kepala_sekolah->user && $kepala_sekolah->user->name)
+                                        {{ $kepala_sekolah->user->name }}
+                                    @elseif(isset($kepala_sekolah->nama_lengkap))
+                                        {{ $kepala_sekolah->nama_lengkap }}
+                                    @else
+                                        {{ config('app.school_principal_name', 'NAMA KEPALA SEKOLAH') }}
+                                    @endif
+                                @else
+                                    {{ config('app.school_principal_name', 'NAMA KEPALA SEKOLAH') }}
+                                @endif
+                            </div>
+                            <div class="signature-nip">
+                                NIP.
+                                @if(isset($kepala_sekolah) && $kepala_sekolah)
+                                    @if($kepala_sekolah->user && isset($kepala_sekolah->user->nip))
+                                        {{ $kepala_sekolah->user->nip ?? 'N/A' }}
+                                    @elseif(isset($kepala_sekolah->nip))
+                                        {{ $kepala_sekolah->nip ?? 'N/A' }}
+                                    @else
+                                        {{ config('app.school_principal_nip', 'NIP KEPALA SEKOLAH') }}
+                                    @endif
+                                @else
+                                    {{ config('app.school_principal_nip', 'NIP KEPALA SEKOLAH') }}
+                                @endif
+                            </div>
+                        </td>
+                        <td style="width: 50%; text-align: center; padding: 0 20px;">
+                            <div>{{ config('app.school_city', 'Banjarejo') }}, {{ \Carbon\Carbon::now()->translatedFormat('d F Y') }}</div>
+                            <div class="signature-title">Wali Kelas</div>
+                            <div class="signature-space"></div>
+                            <div class="signature-name">________________________</div>
+                            <div class="signature-nip">NIP. ________________________</div>
+                        </td>
+                    </tr>
+                </table>
+            @endif
+        </div>
     </div>
+    @endif
 
     <!-- FOOTER -->
-    <div class="footer clearfix">
+    <div class="footer clearfix" style="clear: both; margin-top: 30px;">
         <div class="footer-left">
             <strong>{{ config('app.name', 'Sistem Presensi') }}</strong><br>
             Dicetak oleh: {{ auth()->user()->name }}<br>

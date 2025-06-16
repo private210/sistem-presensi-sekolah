@@ -32,14 +32,16 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
     protected $row_count = 0;
     protected $periode_type;
     protected $total_school_days;
+    protected $is_wali_murid = false; // Add flag untuk wali murid
 
-    public function __construct($data, $tanggal_mulai, $tanggal_selesai, $kelas = null, $wali_kelas = null, $kepala_sekolah = null, $periode_type = 'bulan')
+    public function __construct($data, $tanggal_mulai, $tanggal_selesai, $kelas = null, $wali_kelas = null, $kepala_sekolah = null, $periode_type = 'bulan', $is_wali_murid = false)
     {
         $this->data = $data;
         $this->tanggal_mulai = $tanggal_mulai;
         $this->tanggal_selesai = $tanggal_selesai;
         $this->kelas = $kelas;
         $this->periode_type = $periode_type;
+        $this->is_wali_murid = $is_wali_murid; // Set flag
 
         // Calculate total school days untuk periode
         $this->total_school_days = $this->calculateSchoolDays($tanggal_mulai, $tanggal_selesai);
@@ -115,7 +117,7 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
     }
 
     /**
-     * Calculate total school days (weekdays) in the period
+     * Calculate total school days (weekdays minus holidays)
      */
     protected function calculateSchoolDays($start, $end)
     {
@@ -126,10 +128,26 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
         $current = $startDate->copy();
 
         while ($current->lte($endDate)) {
-            // Count only weekdays (Monday to Friday)
-            if ($current->isWeekday()) {
+            // Skip weekends
+            if ($current->isWeekend()) {
+                $current->addDay();
+                continue;
+            }
+
+            // Check if it's a holiday using HariLibur model
+            $isHoliday = \App\Models\HariLibur::where('tanggal_mulai', '<=', $current->format('Y-m-d'))
+                ->where(function ($query) use ($current) {
+                    $query->whereNull('tanggal_selesai')
+                        ->where('tanggal_mulai', '=', $current->format('Y-m-d'))
+                        ->orWhere('tanggal_selesai', '>=', $current->format('Y-m-d'));
+                })
+                ->exists();
+
+            // Only count if it's not a holiday
+            if (!$isHoliday) {
                 $schoolDays++;
             }
+
             $current->addDay();
         }
 
@@ -234,6 +252,30 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
             }
         }
         return config('app.school_principal_nip', 'NIP KEPALA SEKOLAH');
+    }
+    private function getKepalaSekolahPangkat()
+    {
+        if ($this->kepala_sekolah) {
+            if ($this->kepala_sekolah->user && isset($this->kepala_sekolah->user->pangkat)) {
+                return $this->kepala_sekolah->user->pangkat ?? 'N/A';
+            }
+            if (isset($this->kepala_sekolah->nip)) {
+                return $this->kepala_sekolah->pangkat ?? 'N/A';
+            }
+        }
+        return config('app.school_principal_pangkat', 'PANGKAT KEPALA SEKOLAH');
+    }
+    private function getKepalaSekolahGolongan()
+    {
+        if ($this->kepala_sekolah) {
+            if ($this->kepala_sekolah->user && isset($this->kepala_sekolah->user->golongan)) {
+                return $this->kepala_sekolah->user->golongan ?? 'N/A';
+            }
+            if (isset($this->kepala_sekolah->golongan)) {
+                return $this->kepala_sekolah->golongan ?? 'N/A';
+            }
+        }
+        return config('app.school_principal_golongan', 'GOLONGAN KEPALA SEKOLAH');
     }
 
     public function registerEvents(): array
@@ -561,171 +603,125 @@ class RekapWaliKelasExport implements FromCollection, WithHeadings, WithMapping,
                 $sheet->getColumnDimension('J')->setWidth(11);  // Jumlah Total
                 $sheet->getColumnDimension('K')->setWidth(18);  // Keterangan
 
-                // 5. FORMULA DAN TANDA TANGAN
-                $row += 2;
-                $sheet->setCellValue('A' . $row, 'Keterangan:');
-                $sheet->getStyle('A' . $row)->applyFromArray([
-                    'font' => ['bold' => true]
-                ]);
-
-                $row++;
-                $periodText = $this->periode_type === 'semester' ? 'semester ini' : 'bulan ini';
-                $sheet->setCellValue('A' . $row, "% Absen rata-rata $periodText = (Jumlah siswa dalam $periodText / Jumlah siswa x hari masuk) x 100%");
-
-                // Calculate formula
-                $totalSiswa = $this->groupedData->count();
-                $totalAbsences = $total_izin + $total_sakit + $total_alpha;
-                $maxAttendances = $totalSiswa * $this->total_school_days;
-                $absentPercentage = ($maxAttendances > 0) ? ($totalAbsences / $maxAttendances) * 100 : 0;
-
-                $row++;
-                $sheet->setCellValue('A' . $row, "= ($totalAbsences / ($totalSiswa x {$this->total_school_days})) x 100% = " . number_format($absentPercentage, 1) . '%');
-
-                // 6. SIGNATURE SECTION
-                $row += 3;
-
-                // Check if we have specific class or multiple classes
-                if ($this->kelas && $this->wali_kelas) {
-                    // Single class with wali kelas
-                    $sheet->setCellValue('B' . $row, 'Mengetahui,');
-                    $sheet->setCellValue('H' . $row, config('app.school_city', 'Banjarejo') . ', ' . Carbon::now()->translatedFormat('l, d F Y'));
-
-                    $row++;
-                    $sheet->setCellValue('B' . $row, 'Kepala Sekolah');
-                    $sheet->setCellValue('H' . $row, 'Wali ' . $this->kelas->nama_kelas);
-
-                    $row += 4;
-                    $sheet->setCellValue('B' . $row, $this->getKepalaSekolahName());
-                    $sheet->setCellValue('H' . $row, $this->getWaliKelasName());
-
-                    $row++;
-                    $sheet->setCellValue('B' . $row, 'NIP. ' . $this->getKepalaSekolahNip());
-                    $sheet->setCellValue('H' . $row, 'NIP. ' . $this->getWaliKelasNip());
-
-                    // Style signature names
-                    $sheet->getStyle('B' . ($row - 1))->applyFromArray([
-                        'font' => ['bold' => true, 'underline' => true]
-                    ]);
-                    $sheet->getStyle('H' . ($row - 1))->applyFromArray([
-                        'font' => ['bold' => true, 'underline' => true]
-                    ]);
-                } elseif (!$this->kelas && $this->all_wali_kelas->count() > 0) {
-                    // Multiple classes - show kepala sekolah only, then list all wali kelas
-                    $sheet->setCellValue('F' . $row, config('app.school_city', 'Banjarejo') . ', ' . Carbon::now()->format('d F Y'));
-                    $sheet->mergeCells('F' . $row . ':K' . $row);
-                    $sheet->getStyle('F' . $row)->applyFromArray([
-                        'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
+                // 5. FORMULA DAN TANDA TANGAN (Skip untuk Wali Murid)
+                if (!$this->is_wali_murid) {
+                    $row += 2;
+                    $sheet->setCellValue('A' . $row, 'Keterangan:');
+                    $sheet->getStyle('A' . $row)->applyFromArray([
+                        'font' => ['bold' => true]
                     ]);
 
                     $row++;
-                    $sheet->setCellValue('F' . $row, 'Mengetahui,');
-                    $sheet->mergeCells('F' . $row . ':K' . $row);
-                    $sheet->getStyle('F' . $row)->applyFromArray([
-                        'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
-                    ]);
+                    $periodText = $this->periode_type === 'semester' ? 'semester ini' : 'bulan ini';
+                    $sheet->setCellValue('A' . $row, "% Absen rata-rata $periodText = (Jumlah siswa dalam $periodText / Jumlah siswa x hari masuk) x 100%");
+
+                    // Calculate formula
+                    $totalSiswa = $this->groupedData->count();
+                    $totalAbsences = $total_izin + $total_sakit + $total_alpha;
+                    $maxAttendances = $totalSiswa * $this->total_school_days;
+                    $absentPercentage = ($maxAttendances > 0) ? ($totalAbsences / $maxAttendances) * 100 : 0;
 
                     $row++;
-                    $sheet->setCellValue('F' . $row, 'Kepala Sekolah');
-                    $sheet->mergeCells('F' . $row . ':K' . $row);
-                    $sheet->getStyle('F' . $row)->applyFromArray([
-                        'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
-                    ]);
+                    $sheet->setCellValue('A' . $row, "= ($totalAbsences / ($totalSiswa x {$this->total_school_days})) x 100% = " . number_format($absentPercentage, 1) . '%');
 
-                    $row += 4;
-                    $sheet->setCellValue('F' . $row, $this->getKepalaSekolahName());
-                    $sheet->mergeCells('F' . $row . ':K' . $row);
-                    $sheet->getStyle('F' . $row)->applyFromArray([
-                        'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
-                        'font' => ['bold' => true, 'underline' => true]
-                    ]);
-
-                    $row++;
-                    $sheet->setCellValue('F' . $row, 'NIP. ' . $this->getKepalaSekolahNip());
-                    $sheet->mergeCells('F' . $row . ':K' . $row);
-                    $sheet->getStyle('F' . $row)->applyFromArray([
-                        'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
-                    ]);
-
-                    // Add section for multiple wali kelas
+                    // 6. SIGNATURE SECTION
                     $row += 3;
-                    $sheet->setCellValue('B' . $row, 'Wali Kelas yang Terlibat:');
-                    $sheet->mergeCells('B' . $row . ':K' . $row);
-                    $sheet->getStyle('B' . $row)->applyFromArray([
-                        'font' => ['bold' => true, 'size' => 12],
-                        'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
-                    ]);
 
-                    $row+=2;
-                    $col = 'D';
-                    $wali_per_row = 3;
-                    $wali_count = 0;
+                    // Check if we have specific class or multiple classes
+                    if ($this->kelas && $this->wali_kelas) {
+                        // Single class with wali kelas
+                        $sheet->setCellValue('B' . $row, 'Mengetahui,');
+                        $sheet->setCellValue('H' . $row, config('app.school_city', 'Banjarejo') . ', ' . Carbon::now()->translatedFormat('l, d F Y'));
 
-                    foreach ($this->all_wali_kelas as $wk) {
-                        if ($wali_count > 0 && $wali_count % $wali_per_row == 0) {
-                            $row += 4;
-                            $col = 'D';
-                        }
+                        $row++;
+                        $sheet->setCellValue('B' . $row, 'Kepala Sekolah');
+                        $sheet->setCellValue('H' . $row, 'Wali ' . $this->kelas->nama_kelas);
 
-                        $wali_name = 'NAMA WALI KELAS';
-                        $wali_nip = 'NIP WALI KELAS';
-                        $kelas_name = $wk->kelas->nama_kelas ?? 'Kelas';
+                        $row += 4;
+                        $sheet->setCellValue('B' . $row, $this->getKepalaSekolahName());
+                        $sheet->setCellValue('H' . $row, $this->getWaliKelasName());
 
-                        if ($wk->wali_kelas) {
-                            $wali_name = $wk->wali_kelas->nama_lengkap ?? $wali_name;
-                            $wali_nip = $wk->wali_kelas->nip ?? $wali_nip;
-                        } elseif (isset($wk->nama_lengkap)) {
-                            $wali_name = $wk->nama_lengkap;
-                            $wali_nip = $wk->nip ?? $wali_nip;
-                        }
+                        $row++;
+                        $sheet->setCellValue('B' . $row, 'NIP. ' . $this->getKepalaSekolahNip());
+                        $sheet->setCellValue('H' . $row, 'NIP. ' . $this->getWaliKelasNip());
 
-                        // Kelas
-                        $sheet->setCellValue($col . $row, $kelas_name);
-                        $sheet->getStyle($col . $row)->applyFromArray([
-                            'font' => ['bold' => true],
+                        // Style signature names
+                        $sheet->getStyle('B' . ($row - 1))->applyFromArray([
+                            'font' => ['bold' => true, 'underline' => true]
+                        ]);
+                        $sheet->getStyle('H' . ($row - 1))->applyFromArray([
+                            'font' => ['bold' => true, 'underline' => true]
+                        ]);
+                    } elseif (!$this->kelas && $this->all_wali_kelas->count() > 0) {
+                        // Multiple classes - show kepala sekolah only, then list all wali kelas
+                        $sheet->setCellValue('F' . $row, config('app.school_city', 'Banjarejo') . ', ' . Carbon::now()->format('d F Y'));
+                        $sheet->mergeCells('F' . $row . ':I' . $row);
+                        $sheet->getStyle('F' . $row)->applyFromArray([
                             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
                         ]);
 
-                        // Nama wali kelas
-                        $sheet->setCellValue($col . ($row + 4), $wali_name);
-                        $sheet->getStyle($col . ($row + 4))->applyFromArray([
-                            'font' => ['bold' => true, 'underline' => true],
+                        $row++;
+                        $sheet->setCellValue('F' . $row, 'Mengetahui,');
+                        $sheet->mergeCells('F' . $row . ':I' . $row);
+                        $sheet->getStyle('F' . $row)->applyFromArray([
                             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
                         ]);
 
-                        // NIP
-                        $sheet->setCellValue($col . ($row + 5), 'NIP. ' . $wali_nip);
-                        $sheet->getStyle($col . ($row + 5))->applyFromArray([
+                        $row++;
+                        $sheet->setCellValue('F' . $row, 'Kepala Satuan Pendidikan');
+                        $sheet->mergeCells('F' . $row . ':I' . $row);
+                        $sheet->getStyle('F' . $row)->applyFromArray([
+                            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
+                        ]);
+                        $row++;
+                        $sheet->setCellValue('F' . $row, 'SDN Banjarejo');
+                        $sheet->mergeCells('F' . $row . ':I' . $row);
+                        $sheet->getStyle('F' . $row)->applyFromArray([
                             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
                         ]);
 
-                        // Move to next column
-                        $col = chr(ord($col) + 4);
-                        $wali_count++;
+                        $row += 4;
+                        $sheet->setCellValue('F' . $row, $this->getKepalaSekolahName());
+                        $sheet->mergeCells('F' . $row . ':I' . $row);
+                        $sheet->getStyle('F' . $row)->applyFromArray([
+                            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                            'font' => ['bold' => true, 'underline' => true]
+                        ]);
+
+                        $row++;
+                        $sheet->setCellValue('F' . $row,  $this->getKepalaSekolahPangkat() . ' (' . $this->getKepalaSekolahGolongan(). ')');
+                        $sheet->mergeCells('F' . $row . ':I' . $row);
+                        $sheet->getStyle('F' . $row)->applyFromArray([
+                            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
+                        ]);
+                        $row++;
+                        $sheet->setCellValue('F' . $row, 'NIP. ' . $this->getKepalaSekolahNip());
+                        $sheet->mergeCells('F' . $row . ':I' . $row);
+                        $sheet->getStyle('F' . $row)->applyFromArray([
+                            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]
+                        ]);
+                    } else {
+                        // Fallback - no specific wali kelas information
+                        $sheet->setCellValue('B' . $row, 'Mengetahui,');
+                        $sheet->setCellValue('H' . $row, config('app.school_city', 'Banjarejo') . ', ' . Carbon::now()->format('d F Y'));
+
+                        $row++;
+                        $sheet->setCellValue('B' . $row, 'Kepala Sekolah');
+                        $sheet->setCellValue('H' . $row, 'Wali Kelas');
+
+                        $row += 4;
+                        $sheet->setCellValue('B' . $row, $this->getKepalaSekolahName());
+                        $sheet->setCellValue('H' . $row, '________________________');
+
+                        $row++;
+                        $sheet->setCellValue('B' . $row, 'NIP. ' . $this->getKepalaSekolahNip());
+                        $sheet->setCellValue('H' . $row, 'NIP. ________________________');
+
+                        // Style signature names
+                        $sheet->getStyle('B' . ($row - 1))->applyFromArray([
+                            'font' => ['bold' => true, 'underline' => true]
+                        ]);
                     }
-
-                    $row += 3;
-
-                } else {
-                    // Fallback - no specific wali kelas information
-                    $sheet->setCellValue('B' . $row, 'Mengetahui,');
-                    $sheet->setCellValue('H' . $row, config('app.school_city', 'Banjarejo') . ', ' . Carbon::now()->format('d F Y'));
-
-                    $row++;
-                    $sheet->setCellValue('B' . $row, 'Kepala Sekolah');
-                    $sheet->setCellValue('H' . $row, 'Wali Kelas');
-
-                    $row += 4;
-                    $sheet->setCellValue('B' . $row, $this->getKepalaSekolahName());
-                    $sheet->setCellValue('H' . $row, '________________________');
-
-                    $row++;
-                    $sheet->setCellValue('B' . $row, 'NIP. ' . $this->getKepalaSekolahNip());
-                    $sheet->setCellValue('H' . $row, 'NIP. ________________________');
-
-                    // Style signature names
-                    $sheet->getStyle('B' . ($row - 1))->applyFromArray([
-                        'font' => ['bold' => true, 'underline' => true]
-                    ]);
                 }
 
                 // Footer

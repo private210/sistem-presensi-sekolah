@@ -15,6 +15,8 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Tables\Actions\Action as TableAction;
 use Filament\Tables\Actions\ActionGroup;
+use Filament\Tables\Actions\BulkAction;
+use Filament\Tables\Actions\BulkActionGroup;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -23,6 +25,8 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Session;
 
 class RekapKepalaSekolah extends Page implements HasTable
 {
@@ -39,7 +43,7 @@ class RekapKepalaSekolah extends Page implements HasTable
     public $tanggal_mulai;
     public $tanggal_selesai;
     public $kelas_id;
-    public $periode_type = 'bulan'; // Default ke bulan
+    public $periode_type = 'semester'; // Default ke semester
     public $selected_semester = 'current'; // Current semester by default
 
     public function mount(): void
@@ -139,8 +143,8 @@ class RekapKepalaSekolah extends Page implements HasTable
                         Radio::make('periode_type')
                             ->label('Periode')
                             ->options([
-                                'bulan' => 'Per Bulan',
                                 'semester' => 'Per Semester',
+                                'bulan' => 'Per Bulan',
                             ])
                             ->default($this->periode_type)
                             ->reactive()
@@ -262,7 +266,77 @@ class RekapKepalaSekolah extends Page implements HasTable
                     }),
             ])
             ->bulkActions([
-                // Bulk actions if needed
+                BulkActionGroup::make([
+                    BulkAction::make('bulkExportExcel')
+                        ->label('Export Excel (Data Terpilih)')
+                        ->color('success')
+                        ->icon('heroicon-o-document-arrow-down')
+                        ->requiresConfirmation()
+                        ->modalHeading('Export Data Terpilih ke Excel')
+                        ->modalDescription('Apakah Anda yakin ingin mengexport data presensi yang dipilih ke Excel?')
+                        ->modalSubmitActionLabel('Ya, Export')
+                        ->action(function (Collection $records) {
+                            // Simpan ID records yang dipilih ke session
+                            $recordIds = $records->pluck('id')->toArray();
+                            Session::put('selected_presensi_ids', $recordIds);
+
+                            Notification::make()
+                                ->title('Sedang memproses export Excel...')
+                                ->body('Total ' . count($recordIds) . ' data akan diexport.')
+                                ->info()
+                                ->send();
+
+                            // Redirect ke route export dengan parameter bulk
+                            $params = [
+                                'tanggal_mulai' => $this->tanggal_mulai,
+                                'tanggal_selesai' => $this->tanggal_selesai,
+                                'periode_type' => $this->periode_type,
+                                'bulk_export' => true,
+                            ];
+
+                            if ($this->kelas_id) {
+                                $params['kelas_id'] = $this->kelas_id;
+                            }
+
+                            $this->js('setTimeout(function() { window.location.href = "' . route('export.presensi.kepala-sekolah', $params) . '"; }, 1000);');
+                        })
+                        ->deselectRecordsAfterCompletion(),
+
+                    BulkAction::make('bulkExportPdf')
+                        ->label('Export PDF (Data Terpilih)')
+                        ->color('danger')
+                        ->icon('heroicon-o-document-text')
+                        ->requiresConfirmation()
+                        ->modalHeading('Export Data Terpilih ke PDF')
+                        ->modalDescription('Apakah Anda yakin ingin mengexport data presensi yang dipilih ke PDF?')
+                        ->modalSubmitActionLabel('Ya, Export')
+                        ->action(function (Collection $records) {
+                            // Simpan ID records yang dipilih ke session
+                            $recordIds = $records->pluck('id')->toArray();
+                            Session::put('selected_presensi_ids', $recordIds);
+
+                            Notification::make()
+                                ->title('Sedang memproses export PDF...')
+                                ->body('Total ' . count($recordIds) . ' data akan diexport.')
+                                ->info()
+                                ->send();
+
+                            // Redirect ke route export dengan parameter bulk
+                            $params = [
+                                'tanggal_mulai' => $this->tanggal_mulai,
+                                'tanggal_selesai' => $this->tanggal_selesai,
+                                'periode_type' => $this->periode_type,
+                                'bulk_export' => true,
+                            ];
+
+                            if ($this->kelas_id) {
+                                $params['kelas_id'] = $this->kelas_id;
+                            }
+
+                            $this->js('setTimeout(function() { window.location.href = "' . route('export.presensi.kepala-sekolah-pdf', $params) . '"; }, 1000);');
+                        })
+                        ->deselectRecordsAfterCompletion(),
+                ]),
             ]);
     }
 

@@ -11,6 +11,7 @@ use App\Models\WaliKelas;
 use App\Models\KepalaSekolah;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Session;
 use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
 
@@ -26,6 +27,7 @@ class ExportController extends Controller
         $tanggal_selesai = $request->input('tanggal_selesai', Carbon::now()->format('Y-m-d'));
         $kelas_id = $request->input('kelas_id');
         $periode_type = $request->input('periode_type', 'bulan');
+        $isBulkExport = $request->input('bulk_export', false);
 
         // Get data
         $query = Presensi::with(['siswa', 'kelas'])
@@ -38,7 +40,19 @@ class ExportController extends Controller
             $kelas = null;
         }
 
-        $data = $query->get();
+        // Jika bulk export, filter berdasarkan ID yang dipilih
+        if ($isBulkExport && Session::has('selected_presensi_ids')) {
+            $selectedIds = Session::get('selected_presensi_ids');
+            $query->whereIn('id', $selectedIds);
+
+            // Hapus session setelah digunakan
+            Session::forget('selected_presensi_ids');
+        }
+
+        $data = $query->orderBy('kelas_id')
+            ->orderBy('tanggal_presensi')
+            ->orderBy('siswa_id')
+            ->get();
 
         // Find wali kelas dengan logika yang sama seperti PDF export
         $wali_kelas = null;
@@ -72,6 +86,9 @@ class ExportController extends Controller
 
         // Generate file name
         $fileName = 'rekap_presensi_';
+        if ($isBulkExport) {
+            $fileName .= 'selected_data_';
+        }
         $fileName .= $kelas ? $kelas->nama_kelas . '_' : 'semua_kelas_';
         $fileName .= $periode_type === 'semester' ? 'semester_' : '';
         $fileName .= Carbon::parse($tanggal_mulai)->format('d-m-Y') . '_sd_' . Carbon::parse($tanggal_selesai)->format('d-m-Y');
@@ -79,7 +96,7 @@ class ExportController extends Controller
 
         // Return Excel file dengan data kepala sekolah dan wali kelas
         return Excel::download(
-            new RekapWaliKelasExport($data, $tanggal_mulai, $tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah, $periode_type),
+            new RekapWaliKelasExport($data, $tanggal_mulai, $tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah, $periode_type, false, $isBulkExport),
             $fileName
         );
     }
@@ -92,6 +109,7 @@ class ExportController extends Controller
         $tanggal_selesai = $request->input('tanggal_selesai', Carbon::now()->format('Y-m-d'));
         $kelas_id = $request->input('kelas_id');
         $periode_type = $request->input('periode_type', 'bulan');
+        $isBulkExport = $request->input('bulk_export', false);
 
         // Get data
         $query = Presensi::with(['siswa', 'kelas'])
@@ -104,7 +122,19 @@ class ExportController extends Controller
             $kelas = null;
         }
 
-        $data = $query->get();
+        // Jika bulk export, filter berdasarkan ID yang dipilih
+        if ($isBulkExport && Session::has('selected_presensi_ids')) {
+            $selectedIds = Session::get('selected_presensi_ids');
+            $query->whereIn('id', $selectedIds);
+
+            // Hapus session setelah digunakan
+            Session::forget('selected_presensi_ids');
+        }
+
+        $data = $query->orderBy('kelas_id')
+            ->orderBy('tanggal_presensi')
+            ->orderBy('siswa_id')
+            ->get();
 
         // Process the data for grouping by student
         $groupedData = $data->groupBy('siswa_id')->map(function ($studentData) use ($tanggal_mulai, $tanggal_selesai) {
@@ -170,6 +200,9 @@ class ExportController extends Controller
 
         // Generate file name
         $fileName = 'rekap_presensi_';
+        if ($isBulkExport) {
+            $fileName .= 'selected_data_';
+        }
         $fileName .= $kelas ? $kelas->nama_kelas . '_' : 'semua_kelas_';
         $fileName .= $periode_type === 'semester' ? 'semester_' : '';
         $fileName .= Carbon::parse($tanggal_mulai)->format('d-m-Y') . '_sd_' . Carbon::parse($tanggal_selesai)->format('d-m-Y');
@@ -187,6 +220,7 @@ class ExportController extends Controller
             'all_wali_kelas' => $all_wali_kelas, // Kirim semua wali kelas jika export semua kelas
             'kepala_sekolah' => $kepala_sekolah,
             'periode_type' => $periode_type,
+            'isBulkExport' => $isBulkExport, // Pass bulk export flag
         ]);
 
         // Set paper to landscape for better table viewing
@@ -213,6 +247,7 @@ class ExportController extends Controller
             ]);
 
             $periode_type = $request->input('periode_type', 'bulan');
+            $isBulkExport = $request->input('bulk_export', false);
 
             $waliKelas = auth()->user()->waliKelas;
             if (!$waliKelas) {
@@ -220,10 +255,20 @@ class ExportController extends Controller
             }
 
             // Ambil data presensi hanya untuk kelas yang dipegang
-            $data = Presensi::with(['siswa', 'kelas'])
+            $query = Presensi::with(['siswa', 'kelas'])
                 ->where('kelas_id', $waliKelas->kelas_id)
-                ->whereBetween('tanggal_presensi', [$request->tanggal_mulai, $request->tanggal_selesai])
-                ->orderBy('tanggal_presensi', 'desc')
+                ->whereBetween('tanggal_presensi', [$request->tanggal_mulai, $request->tanggal_selesai]);
+
+            // Jika bulk export, filter berdasarkan ID yang dipilih
+            if ($isBulkExport && Session::has('selected_presensi_ids')) {
+                $selectedIds = Session::get('selected_presensi_ids');
+                $query->whereIn('id', $selectedIds);
+
+                // Hapus session setelah digunakan
+                Session::forget('selected_presensi_ids');
+            }
+
+            $data = $query->orderBy('tanggal_presensi', 'desc')
                 ->orderBy('siswa_id')
                 ->get();
 
@@ -238,13 +283,17 @@ class ExportController extends Controller
                 ->where('is_active', true)
                 ->first();
 
-            $filename = 'rekap-presensi-' . str_replace(' ', '-', strtolower($kelas->nama_kelas)) . '-' .
+            $filename = 'rekap-presensi-';
+            if ($isBulkExport) {
+                $filename .= 'selected-data-';
+            }
+            $filename .= str_replace(' ', '-', strtolower($kelas->nama_kelas)) . '-' .
                 ($periode_type === 'semester' ? 'semester-' : '') .
                 Carbon::parse($request->tanggal_mulai)->format('Y-m-d') . '-to-' .
                 Carbon::parse($request->tanggal_selesai)->format('Y-m-d') . '.xlsx';
 
             return Excel::download(
-                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $waliKelas, $kepala_sekolah, $periode_type),
+                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $waliKelas, $kepala_sekolah, $periode_type, false, $isBulkExport),
                 $filename
             );
         } catch (\Exception $e) {
@@ -305,8 +354,9 @@ class ExportController extends Controller
                 Carbon::parse($request->tanggal_mulai)->format('Y-m-d') . '-to-' .
                 Carbon::parse($request->tanggal_selesai)->format('Y-m-d') . '.xlsx';
 
+            // Pass is_wali_murid flag as true
             return Excel::download(
-                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah, $periode_type),
+                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah, $periode_type, true),
                 $filename
             );
         } catch (\Exception $e) {
@@ -333,6 +383,7 @@ class ExportController extends Controller
             ]);
 
             $periode_type = $request->input('periode_type', 'bulan');
+            $isBulkExport = $request->input('bulk_export', false);
 
             $query = Presensi::with(['siswa', 'kelas'])
                 ->whereBetween('tanggal_presensi', [$request->tanggal_mulai, $request->tanggal_selesai]);
@@ -343,6 +394,15 @@ class ExportController extends Controller
 
             if ($request->status) {
                 $query->where('status', $request->status);
+            }
+
+            // Jika bulk export, filter berdasarkan ID yang dipilih
+            if ($isBulkExport && Session::has('selected_presensi_ids')) {
+                $selectedIds = Session::get('selected_presensi_ids');
+                $query->whereIn('id', $selectedIds);
+
+                // Hapus session setelah digunakan
+                Session::forget('selected_presensi_ids');
             }
 
             $data = $query->orderBy('tanggal_presensi', 'desc')
@@ -386,12 +446,15 @@ class ExportController extends Controller
                 ->where('is_active', true)
                 ->first();
 
-            $filename = 'rekap-presensi-general-' .
-                Carbon::parse($request->tanggal_mulai)->format('Y-m-d') . '-to-' .
+            $filename = 'rekap-presensi-general-';
+            if ($isBulkExport) {
+                $filename .= 'selected-data-';
+            }
+            $filename .= Carbon::parse($request->tanggal_mulai)->format('Y-m-d') . '-to-' .
                 Carbon::parse($request->tanggal_selesai)->format('Y-m-d') . '.xlsx';
 
             return Excel::download(
-                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah, $periode_type),
+                new RekapWaliKelasExport($data, $request->tanggal_mulai, $request->tanggal_selesai, $kelas, $wali_kelas, $kepala_sekolah, $periode_type, false, $isBulkExport),
                 $filename
             );
         } catch (\Exception $e) {
@@ -415,16 +478,27 @@ class ExportController extends Controller
             ]);
 
             $periode_type = $request->input('periode_type', 'bulan');
+            $isBulkExport = $request->input('bulk_export', false);
 
             $waliKelas = auth()->user()->waliKelas;
             if (!$waliKelas) {
                 abort(404, 'Data wali kelas tidak ditemukan');
             }
 
-            $data = Presensi::with(['siswa', 'kelas'])
+            $query = Presensi::with(['siswa', 'kelas'])
                 ->where('kelas_id', $waliKelas->kelas_id)
-                ->whereBetween('tanggal_presensi', [$request->tanggal_mulai, $request->tanggal_selesai])
-                ->orderBy('tanggal_presensi', 'desc')
+                ->whereBetween('tanggal_presensi', [$request->tanggal_mulai, $request->tanggal_selesai]);
+
+            // Jika bulk export, filter berdasarkan ID yang dipilih
+            if ($isBulkExport && Session::has('selected_presensi_ids')) {
+                $selectedIds = Session::get('selected_presensi_ids');
+                $query->whereIn('id', $selectedIds);
+
+                // Hapus session setelah digunakan
+                Session::forget('selected_presensi_ids');
+            }
+
+            $data = $query->orderBy('tanggal_presensi', 'desc')
                 ->orderBy('siswa_id')
                 ->get();
 
@@ -480,11 +554,16 @@ class ExportController extends Controller
                 'wali_kelas' => $waliKelas,
                 'kepala_sekolah' => $kepala_sekolah,
                 'periode_type' => $periode_type,
+                'isBulkExport' => $isBulkExport,
             ]);
 
             $pdf->setPaper('A4', 'landscape');
 
-            $filename = 'rekap-presensi-' . str_replace(' ', '-', strtolower($kelas->nama_kelas)) . '-' .
+            $filename = 'rekap-presensi-';
+            if ($isBulkExport) {
+                $filename .= 'selected-data-';
+            }
+            $filename .= str_replace(' ', '-', strtolower($kelas->nama_kelas)) . '-' .
                 ($periode_type === 'semester' ? 'semester-' : '') .
                 Carbon::parse($request->tanggal_mulai)->format('Y-m-d') . '-to-' .
                 Carbon::parse($request->tanggal_selesai)->format('Y-m-d') . '.pdf';
@@ -582,6 +661,7 @@ class ExportController extends Controller
                 'wali_kelas' => $waliKelas,
                 'kepala_sekolah' => $kepala_sekolah,
                 'periode_type' => $periode_type,
+                'is_wali_murid' => true, // Pass flag to indicate this is wali murid export
             ]);
 
             $pdf->setPaper('A4', 'landscape');
@@ -616,6 +696,7 @@ class ExportController extends Controller
             ]);
 
             $periode_type = $request->input('periode_type', 'bulan');
+            $isBulkExport = $request->input('bulk_export', false);
 
             $query = Presensi::with(['siswa', 'kelas'])
                 ->whereBetween('tanggal_presensi', [$request->tanggal_mulai, $request->tanggal_selesai]);
@@ -626,6 +707,15 @@ class ExportController extends Controller
 
             if ($request->status) {
                 $query->where('status', $request->status);
+            }
+
+            // Jika bulk export, filter berdasarkan ID yang dipilih
+            if ($isBulkExport && Session::has('selected_presensi_ids')) {
+                $selectedIds = Session::get('selected_presensi_ids');
+                $query->whereIn('id', $selectedIds);
+
+                // Hapus session setelah digunakan
+                Session::forget('selected_presensi_ids');
             }
 
             $data = $query->orderBy('tanggal_presensi', 'desc')
@@ -711,12 +801,16 @@ class ExportController extends Controller
                 'all_wali_kelas' => $all_wali_kelas,
                 'kepala_sekolah' => $kepala_sekolah,
                 'periode_type' => $periode_type,
+                'isBulkExport' => $isBulkExport,
             ]);
 
             $pdf->setPaper('A4', 'landscape');
 
-            $filename = 'rekap-presensi-general-' .
-                ($kelas ? str_replace(' ', '-', strtolower($kelas->nama_kelas)) . '-' : 'semua-kelas-') .
+            $filename = 'rekap-presensi-general-';
+            if ($isBulkExport) {
+                $filename .= 'selected-data-';
+            }
+            $filename .= ($kelas ? str_replace(' ', '-', strtolower($kelas->nama_kelas)) . '-' : 'semua-kelas-') .
                 ($periode_type === 'semester' ? 'semester-' : '') .
                 Carbon::parse($request->tanggal_mulai)->format('Y-m-d') . '-to-' .
                 Carbon::parse($request->tanggal_selesai)->format('Y-m-d') . '.pdf';
@@ -728,7 +822,7 @@ class ExportController extends Controller
     }
 
     /**
-     * Calculate total school days (weekdays only)
+     * Calculate total school days (weekdays minus holidays)
      */
     protected function calculateSchoolDays($start, $end)
     {
@@ -739,10 +833,26 @@ class ExportController extends Controller
         $current = $startDate->copy();
 
         while ($current->lte($endDate)) {
-            // Count only weekdays (Monday to Friday)
-            if ($current->isWeekday()) {
+            // Skip weekends
+            if ($current->isWeekend()) {
+                $current->addDay();
+                continue;
+            }
+
+            // Check if it's a holiday
+            $isHoliday = \App\Models\HariLibur::where('tanggal_mulai', '<=', $current->format('Y-m-d'))
+                ->where(function ($query) use ($current) {
+                    $query->whereNull('tanggal_selesai')
+                        ->where('tanggal_mulai', '=', $current->format('Y-m-d'))
+                        ->orWhere('tanggal_selesai', '>=', $current->format('Y-m-d'));
+                })
+                ->exists();
+
+            // Only count if it's not a holiday
+            if (!$isHoliday) {
                 $schoolDays++;
             }
+
             $current->addDay();
         }
 

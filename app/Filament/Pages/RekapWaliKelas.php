@@ -52,7 +52,7 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
     public $tanggal_selesai;
     public $kelas_id;
     public $pertemuan_ke = null;
-    public $periode_type = 'bulan'; // Default ke bulan
+    public $periode_type = 'semester'; // Default ke semester
     public $selected_semester;
 
     public function mount(): void
@@ -403,12 +403,12 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
                     }),
             ])
             ->bulkActions([
-                BulkAction::make('export_selected')
-                    ->label('Export Terpilih')
-                    ->icon('heroicon-o-arrow-down-tray')
-                    ->action(function (Collection $records) {
-                        return $this->exportSelectedToExcel($records);
-                    }),
+                // BulkAction::make('export_selected')
+                //     ->label('Export Terpilih')
+                //     ->icon('heroicon-o-arrow-down-tray')
+                //     ->action(function (Collection $records) {
+                //         return $this->exportSelectedToExcel($records);
+                //     }),
             ])
             ->paginated([10, 25, 50, 100])
             ->defaultPaginationPageOption(25);

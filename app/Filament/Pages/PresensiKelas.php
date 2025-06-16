@@ -204,6 +204,15 @@ class PresensiKelas extends Page implements HasForms, HasTable
                     $keterangan = 'Hari libur akhir pekan - ' . $this->weekend_info->day_name;
                 } elseif ($this->is_holiday) {
                     $keterangan = 'Hari libur resmi - ' . $this->holiday_info->nama_hari_libur;
+
+                    // Tambahkan info rentang tanggal jika lebih dari 1 hari
+                    if (
+                        $this->holiday_info->tanggal_selesai &&
+                        !$this->holiday_info->tanggal_mulai->equalTo($this->holiday_info->tanggal_selesai)
+                    ) {
+                        $keterangan .= ' (' . $this->holiday_info->tanggal_mulai->format('d M') .
+                            ' - ' . $this->holiday_info->tanggal_selesai->format('d M Y') . ')';
+                    }
                 }
             } else {
                 $status = 'Hadir'; // Default hadir untuk hari sekolah
@@ -269,8 +278,15 @@ class PresensiKelas extends Page implements HasForms, HasTable
             ];
         }
 
-        // Cek hari libur resmi
-        $holiday = HariLibur::where('tanggal', $this->tanggal)->first();
+        // Cek hari libur resmi dengan range tanggal
+        $holiday = HariLibur::where('tanggal_mulai', '<=', $this->tanggal)
+            ->where(function ($query) {
+                $query->whereNull('tanggal_selesai')
+                    ->where('tanggal_mulai', '=', $this->tanggal)
+                    ->orWhere('tanggal_selesai', '>=', $this->tanggal);
+            })
+            ->first();
+
         if ($holiday) {
             $this->is_holiday = true;
             $this->is_non_school_day = true;
@@ -304,13 +320,16 @@ class PresensiKelas extends Page implements HasForms, HasTable
             return true;
         }
 
-        // Cek hari libur
-        $holiday = HariLibur::where('tanggal', $date->format('Y-m-d'))->first();
-        if ($holiday) {
-            return true;
-        }
+        // Cek hari libur dengan range tanggal
+        $holiday = HariLibur::where('tanggal_mulai', '<=', $date->format('Y-m-d'))
+            ->where(function ($query) use ($date) {
+                $query->whereNull('tanggal_selesai')
+                    ->where('tanggal_mulai', '=', $date->format('Y-m-d'))
+                    ->orWhere('tanggal_selesai', '>=', $date->format('Y-m-d'));
+            })
+            ->exists();
 
-        return false;
+        return $holiday;
     }
 
     /**
@@ -761,8 +780,15 @@ class PresensiKelas extends Page implements HasForms, HasTable
             return false;
         }
 
-        // Skip jika hari libur
-        $holiday = HariLibur::where('tanggal', $date)->first();
+        // Skip jika hari libur dengan range tanggal
+        $holiday = HariLibur::where('tanggal_mulai', '<=', $date)
+            ->where(function ($query) use ($date) {
+                $query->whereNull('tanggal_selesai')
+                    ->where('tanggal_mulai', '=', $date)
+                    ->orWhere('tanggal_selesai', '>=', $date);
+            })
+            ->exists();
+
         if ($holiday) {
             return false;
         }
@@ -778,14 +804,8 @@ class PresensiKelas extends Page implements HasForms, HasTable
                 ->where('is_active', true)
                 ->get();
 
-            // Cari pertemuan_ke terakhir
-            $latestPresensi = Presensi::where('kelas_id', $waliKelas->kelas_id)
-                ->where('tanggal_presensi', '<', $date)
-                ->orderBy('tanggal_presensi', 'desc')
-                ->orderBy('pertemuan_ke', 'desc')
-                ->first();
-
-            $pertemuan_ke = $latestPresensi ? $latestPresensi->pertemuan_ke + 1 : 1;
+            // Hitung pertemuan_ke dengan benar
+            $pertemuan_ke = self::calculatePertemuanKe($waliKelas->kelas_id, $date);
 
             foreach ($siswaList as $siswa) {
                 // Cek apakah sudah ada presensi
@@ -826,5 +846,43 @@ class PresensiKelas extends Page implements HasForms, HasTable
         }
 
         return true;
+    }
+
+    /**
+     * Helper method untuk menghitung pertemuan_ke dengan benar
+     */
+    protected static function calculatePertemuanKe($kelasId, $date): int
+    {
+        $selectedDate = Carbon::parse($date);
+        $firstDayOfMonth = $selectedDate->copy()->firstOfMonth();
+
+        // Hitung hari sekolah dari awal bulan sampai tanggal yang dipilih
+        $schoolDaysCount = 0;
+        $currentDay = $firstDayOfMonth->copy();
+
+        while ($currentDay->lte($selectedDate)) {
+            // Skip weekend
+            if ($currentDay->dayOfWeek === Carbon::SATURDAY || $currentDay->dayOfWeek === Carbon::SUNDAY) {
+                $currentDay->addDay();
+                continue;
+            }
+
+            // Skip hari libur
+            $isHoliday = HariLibur::where('tanggal_mulai', '<=', $currentDay->format('Y-m-d'))
+                ->where(function ($query) use ($currentDay) {
+                    $query->whereNull('tanggal_selesai')
+                        ->where('tanggal_mulai', '=', $currentDay->format('Y-m-d'))
+                        ->orWhere('tanggal_selesai', '>=', $currentDay->format('Y-m-d'));
+                })
+                ->exists();
+
+            if (!$isHoliday) {
+                $schoolDaysCount++;
+            }
+
+            $currentDay->addDay();
+        }
+
+        return $schoolDaysCount;
     }
 }

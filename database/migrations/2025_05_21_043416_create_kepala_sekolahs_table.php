@@ -15,6 +15,8 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained('users');
             $table->string('nip')->nullable();
+            $table->string('pangkat')->nullable();
+            $table->string('golongan')->nullable();
             $table->string('nama_lengkap');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
