@@ -69,6 +69,9 @@ class IzinResource extends Resource
                     ->label('Bukti Pendukung (Surat Dokter/Keterangan)')
                     ->directory('bukti-izin')
                     ->visibility('public')
+                    ->maxSize(1024) // 1 MB
+                    ->openable(true)
+                    ->downloadable(true)
                     ->hint('Unggah file gambar atau PDF')
                     ->acceptedFileTypes(['image/jpeg', 'image/png', 'application/pdf']),
                 Forms\Components\Select::make('status')

@@ -38,7 +38,7 @@ class RekapWaliMurid extends Page implements HasForms, HasTable
     use HasPageShield;
 
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
-    protected static ?string $navigationLabel = 'Rekap Wali Murid';
+    protected static ?string $navigationLabel = 'Rekap Presensi Siswa';
     protected static ?string $navigationTitle = 'Rekap Wali Murid';
     protected static ?string $navigationGroup = 'Wali Murid';
     protected static string $view = 'filament.pages.rekap-wali-murid';

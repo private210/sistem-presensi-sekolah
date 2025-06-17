@@ -38,7 +38,7 @@ class PresensiKelas extends Page implements HasForms, HasTable
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-check';
     protected static ?string $navigationLabel = 'Presensi Kelas';
-    protected static ?string $navigationGroup = 'Wali Kelas';
+    protected static ?string $navigationGroup = 'Manajemen Presensi';
     protected static ?string $title = 'Presensi Kelas Wali Kelas';
     protected static string $view = 'filament.pages.presensi-kelas';
 

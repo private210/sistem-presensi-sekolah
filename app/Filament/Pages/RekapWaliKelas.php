@@ -44,7 +44,7 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
     protected static ?string $navigationLabel = 'Rekap Wali Kelas';
     protected static ?string $navigationTitle = 'Rekap Presensi';
-    protected static ?string $navigationGroup = 'Wali Kelas';
+    protected static ?string $navigationGroup = 'Rekap Presensi Kelas';
     protected static ?int $navigationSort = 2;
     protected static string $view = 'filament.pages.rekap-wali-kelas';
 

@@ -65,7 +65,7 @@ class AdminPanelProvider extends PanelProvider
                 // Widgets\FilamentInfoWidget::class,
             ])
             ->sidebarFullyCollapsibleOnDesktop()
-            ->databaseNotifications()
+            // ->databaseNotifications()
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

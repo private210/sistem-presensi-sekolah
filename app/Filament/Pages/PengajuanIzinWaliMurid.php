@@ -91,11 +91,12 @@ class PengajuanIzinWaliMurid extends Page implements HasTable, HasForms
                             ->required()
                             ->placeholder('Jelaskan alasan izin dengan detail...')
                             ->rows(4),
-                            // ->columnSpanFull(),
+                        // ->columnSpanFull(),
                         Forms\Components\FileUpload::make('bukti_pendukung')
                             ->label('Bukti Pendukung')
                             ->directory('bukti-izin')
                             ->visibility('public')
+                            ->storeFileNamesIn('attachment_file_names')
                             ->hint('Upload surat dokter (untuk sakit) atau dokumen pendukung lainnya')
                             ->helperText('File yang didukung: JPG, PNG, PDF (Maksimal 2MB)')
                             ->acceptedFileTypes(['image/jpeg', 'image/png', 'application/pdf'])
