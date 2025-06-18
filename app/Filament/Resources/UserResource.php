@@ -9,6 +9,7 @@ use Filament\Forms\Form;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
 use Illuminate\Support\Facades\Hash;
+use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use App\Filament\Resources\UserResource\Pages;
@@ -88,6 +89,21 @@ class UserResource extends Resource
             ])
             ->filters([
                 //
+            ])
+            ->headerActions([
+            Tables\Actions\Action::make('refreshData')
+                ->label('Refresh Data')
+                ->color('secondary')
+                ->icon('heroicon-o-arrow-path')
+                ->action(function ($livewire) {
+                    // Use the $livewire parameter to access the component
+                    $livewire->resetTable();
+
+                    Notification::make()
+                        ->title('Data berhasil di-refresh')
+                        ->success()
+                        ->send();
+                }),
             ])
             ->actions([
             Tables\Actions\EditAction::make(),

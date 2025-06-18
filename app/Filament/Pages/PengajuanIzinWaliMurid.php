@@ -13,6 +13,9 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
+use Filament\Infolists\Components\Section;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ImageEntry;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Tables\Concerns\InteractsWithTable;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
@@ -97,9 +100,11 @@ class PengajuanIzinWaliMurid extends Page implements HasTable, HasForms
                             ->directory('bukti-izin')
                             ->visibility('public')
                             ->storeFileNamesIn('attachment_file_names')
+                            // ->storeFileNamesIn('surat_izin')
+                            // ->preserveFilenames()
                             ->hint('Upload surat dokter (untuk sakit) atau dokumen pendukung lainnya')
-                            ->helperText('File yang didukung: JPG, PNG, PDF (Maksimal 2MB)')
-                            ->acceptedFileTypes(['image/jpeg', 'image/png', 'application/pdf'])
+                            ->helperText('File yang didukung: JPG, JPEG, PNG, PDF (Maksimal 2MB)')
+                            ->acceptedFileTypes(['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'])
                             ->maxSize(2048)
                             ->required()
                             ->columnSpanFull(),
@@ -189,12 +194,105 @@ class PengajuanIzinWaliMurid extends Page implements HasTable, HasForms
                         'Izin' => 'Izin',
                     ]),
             ])
+            ->headerActions([
+                Tables\Actions\Action::make('refreshData')
+                    ->label('Refresh Data')
+                    ->color('secondary')
+                    ->icon('heroicon-o-arrow-path')
+                    ->action(function ($livewire) {
+                        // Use the $livewire parameter to access the component
+                        $livewire->resetTable();
+
+                        Notification::make()
+                            ->title('Data berhasil di-refresh')
+                            ->success()
+                            ->send();
+                    }),
+            ])
             ->actions([
                 Tables\Actions\ViewAction::make()
                     ->modalHeading('Detail Surat Izin')
-                    ->modalContent(function (Izin $record) {
-                        return view('filament.pages.components.detail-izin-wali-murid', compact('record'));
-                    }),
+                    ->infolist([
+                        Section::make('Informasi Siswa')
+                            ->schema([
+                                TextEntry::make('siswas.nama_lengkap')
+                                    ->label('Nama Siswa'),
+                                TextEntry::make('siswas.nis')
+                                    ->label('NIS'),
+                                TextEntry::make('siswas.kelas.nama_kelas')
+                                    ->label('Kelas'),
+                            ])
+                            ->columns(3),
+
+                        Section::make('Detail Izin')
+                            ->schema([
+                                TextEntry::make('tanggal_mulai')
+                                    ->label('Tanggal Mulai')
+                                    ->date('d F Y'),
+                                TextEntry::make('tanggal_selesai')
+                                    ->label('Tanggal Selesai')
+                                    ->date('d F Y'),
+                                TextEntry::make('jenis_izin')
+                                    ->label('Jenis Izin')
+                                    ->badge()
+                                    ->color(fn(string $state): string => match ($state) {
+                                        'Sakit' => 'warning',
+                                        'Izin' => 'info',
+                                        default => 'gray',
+                                    }),
+                                TextEntry::make('status')
+                                    ->label('Status')
+                                    ->badge()
+                                    ->color(fn(string $state): string => match ($state) {
+                                        'Menunggu' => 'gray',
+                                        'Disetujui' => 'success',
+                                        'Ditolak' => 'danger',
+                                        default => 'gray',
+                                    }),
+                                TextEntry::make('keterangan')
+                                    ->label('Keterangan')
+                                    ->columnSpanFull(),
+                            ]),
+                        Section::make('Bukti Pendukung')
+                            ->schema([
+                                ImageEntry::make('bukti_pendukung')
+                                    ->label('Bukti Pendukung')
+                                    ->disk('public') // sesuaikan dengan disk yang digunakan
+                                    ->size(300)
+                                    ->columnSpanFull()
+                                    ->visible(fn($record) => $record->bukti_pendukung && $this->isImage($record->bukti_pendukung)),
+
+                                TextEntry::make('bukti_pendukung')
+                                    ->label('File Bukti Pendukung')
+                                    ->state(fn($record) => basename($record->bukti_pendukung))
+                                    ->url(fn($record) => $this->getFileUrl($record->bukti_pendukung))
+                                    ->openUrlInNewTab()
+                                    ->color('primary')
+                                    ->icon('heroicon-o-document-arrow-down')
+                                    ->visible(fn($record) => $record->bukti_pendukung && !$this->isImage($record->bukti_pendukung)),
+                            ])
+                            ->columns(2),
+
+                        Section::make('Informasi Proses')
+                            ->schema([
+                                TextEntry::make('created_at')
+                                    ->label('Tanggal Pengajuan')
+                                    ->dateTime('d F Y H:i'),
+                                TextEntry::make('approved_at')
+                                    ->label('Tanggal Diproses')
+                                    ->dateTime('d F Y H:i')
+                                    ->placeholder('-'),
+                                TextEntry::make('approvedBy.name')
+                                    ->label('Diproses Oleh')
+                                    ->placeholder('-'),
+                                TextEntry::make('catatan_approval')
+                                    ->label('Catatan Persetujuan')
+                                    ->placeholder('-')
+                                    ->columnSpanFull()
+                                    ->visible(fn($record) => $record->catatan_approval !== null),
+                            ])
+                            ->columns(3),
+                    ]),
                 Tables\Actions\EditAction::make()
                     ->visible(fn(Izin $record) => $record->status === 'Menunggu')
                     ->form([
@@ -251,15 +349,22 @@ class PengajuanIzinWaliMurid extends Page implements HasTable, HasForms
 
         return "Pengajuan Izin - {$siswaName}";
     }
-
-    protected function getHeaderActions(): array
+    protected function isImage(string $filename): bool
     {
-        return [
-            Actions\Action::make('create')
-                ->label('Ajukan Izin Baru')
-                ->icon('heroicon-o-plus')
-                ->color('primary')
-                ->action('create'),
-        ];
+        $imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'];
+        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+        return in_array($extension, $imageExtensions);
     }
+
+    // protected function getHeaderActions(): array
+    // {
+    //     return [
+    //         Actions\Action::make('create')
+    //             ->label('Ajukan Izin Baru')
+    //             ->icon('heroicon-o-plus')
+    //             ->color('primary')
+    //             ->action('create'),
+    //     ];
+    // }
 }

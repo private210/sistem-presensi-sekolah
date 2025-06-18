@@ -2,15 +2,16 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\IzinResource\Pages;
-use App\Models\Izin;
-use App\Models\Siswa;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
+use App\Models\Izin;
 use Filament\Tables;
+use App\Models\Siswa;
+use Filament\Forms\Form;
 use Filament\Tables\Table;
+use Filament\Resources\Resource;
+use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
+use App\Filament\Resources\IzinResource\Pages;
 
 class IzinResource extends Resource
 {
@@ -63,17 +64,7 @@ class IzinResource extends Resource
                     ->required(),
                 Forms\Components\Textarea::make('keterangan')
                     ->label('Keterangan')
-                    ->required()
-                    ->columnSpanFull(),
-                Forms\Components\FileUpload::make('bukti_pendukung')
-                    ->label('Bukti Pendukung (Surat Dokter/Keterangan)')
-                    ->directory('bukti-izin')
-                    ->visibility('public')
-                    ->maxSize(1024) // 1 MB
-                    ->openable(true)
-                    ->downloadable(true)
-                    ->hint('Unggah file gambar atau PDF')
-                    ->acceptedFileTypes(['image/jpeg', 'image/png', 'application/pdf']),
+                    ->required(),
                 Forms\Components\Select::make('status')
                     ->label('Status')
                     ->options([
@@ -86,6 +77,17 @@ class IzinResource extends Resource
                         return !auth()->user()->hasRole(['Wali Kelas', 'super_admin']);
                     })
                     ->required(),
+                Forms\Components\FileUpload::make('bukti_pendukung')
+                    ->label('Bukti Pendukung (Surat Dokter/Keterangan)')
+                    ->directory('bukti-izin')
+                    ->columnSpanFull()
+                    ->visibility('public')
+                    ->maxSize(2048) // 2 MB
+                    // ->openable(true)
+                    ->preserveFilenames(true)
+                    // ->downloadable(true)
+                    ->hint('Unggah file JPEG, JPG, PNG atau PDF maksimal 2 MB.')
+                    ->acceptedFileTypes(['image/jpeg', 'image/jpg', 'image/png', 'application/pdf']),
             ]);
     }
 
@@ -131,6 +133,16 @@ class IzinResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->groups([
+                Tables\Grouping\Group::make('Kelas')
+                    ->column('siswas.kelas.nama_kelas')
+                    ->collapsible(),
+                Tables\Grouping\Group::make('Tanggal')
+                    ->column('tanggal_mulai')
+                    ->date('d/m/Y')
+                    ->collapsible(),
+            ])
+            ->defaultGroup('Kelas')
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Status')
@@ -148,7 +160,7 @@ class IzinResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ViewAction::make()
-                ->slideOver(),
+                    ->slideOver(),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
                 Tables\Actions\Action::make('approve')
@@ -182,6 +194,21 @@ class IzinResource extends Resource
                             'approved_by' => auth()->id(),
                             'approved_at' => now(),
                         ]);
+                    }),
+            ])
+            ->headerActions([
+                Tables\Actions\Action::make('refreshData')
+                    ->label('Refresh Data')
+                    ->color('secondary')
+                    ->icon('heroicon-o-arrow-path')
+                    ->action(function ($livewire) {
+                        // Use the $livewire parameter to access the component
+                        $livewire->resetTable();
+
+                        Notification::make()
+                            ->title('Data berhasil di-refresh')
+                            ->success()
+                            ->send();
                     }),
             ])
             ->bulkActions([

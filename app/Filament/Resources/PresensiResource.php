@@ -31,7 +31,7 @@ class PresensiResource extends Resource
                     ->default(now())
                     ->disabled(fn(string $operation): bool => $operation === 'edit'),
                 Forms\Components\TextInput::make('pertemuan_ke')
-                    ->label('Pertemuan Ke')
+                    ->label('Hari Ke')
                     ->required()
                     ->numeric()
                     ->default(1),
@@ -45,7 +45,7 @@ class PresensiResource extends Resource
                     ->disabled(fn(string $operation): bool => $operation === 'edit'),
                 Forms\Components\Select::make('siswa_id')
                     ->label('Siswa')
-                    ->relationship('siswas', 'nama_lengkap')
+                    ->relationship('siswa', 'nama_lengkap')
                     ->options(function () {
                         return Siswa::pluck('nama_lengkap', 'id');
                     })
@@ -78,8 +78,9 @@ class PresensiResource extends Resource
                 Tables\Columns\TextColumn::make('pertemuan_ke')
                     ->label('Pertemuan Ke')
                     ->numeric()
+                    ->alignCenter()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('siswas.nama_lengkap')
+                Tables\Columns\TextColumn::make('siswa.nama_lengkap')
                     ->label('Nama Siswa')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('kelas.nama_kelas')
@@ -104,6 +105,16 @@ class PresensiResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->defaultSort('tanggal_presensi', 'desc')
+            ->groups([
+                Tables\Grouping\Group::make('Kelas')
+                    ->column('kelas.nama_kelas')
+                    ->collapsible(),
+                Tables\Grouping\Group::make('Tanggal')
+                    ->column('tanggal_presensi')
+                    ->collapsible(),
+            ])
+            ->defaultGroup('Kelas')
             ->filters([
                 Tables\Filters\Filter::make('tanggal_presensi')
                     ->form([

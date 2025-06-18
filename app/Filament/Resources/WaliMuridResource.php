@@ -36,10 +36,23 @@ class WaliMuridResource extends Resource
                             ->email()
                             ->required()
                             ->maxLength(255)
-                            ->unique(table: User::class, column: 'email', ignoreRecord: true),
+                            ->unique(
+                                table: User::class,
+                                column: 'email',
+                                ignoreRecord: true,
+                                modifyRuleUsing: function ($rule, $get, $record) {
+                                    // Jika sedang edit, abaikan email user yang sedang diedit
+                                    if ($record && $record->user) {
+                                        return $rule->ignore($record->user->id);
+                                    }
+                                    return $rule;
+                                }
+                            ),
                         Forms\Components\TextInput::make('password')
                             ->label('Password')
                             ->password()
+                            ->revealable()
+                            ->hint('Minimal 8 karakter, maksimal 32 karakter')
                             ->dehydrated(fn($state) => filled($state))
                             ->dehydrateStateUsing(fn($state) => Hash::make($state))
                             ->required(fn(string $operation): bool => $operation === 'create')
@@ -164,7 +177,57 @@ class WaliMuridResource extends Resource
                             return $record;
                         });
                     }),
-                Tables\Actions\ViewAction::make(),
+                Tables\Actions\ViewAction::make('View')
+                    ->icon('heroicon-o-eye')
+                    ->label('Detail')
+                    ->modalHeading('Detail Kepala Sekolah')
+                    ->form([
+                        // Data User
+                        Forms\Components\Section::make('Data Akun')
+                            ->schema([
+                                Forms\Components\TextInput::make('user.name')
+                                    ->label('Nama Pengguna')
+                                    ->disabled(),
+                                Forms\Components\TextInput::make('user.email')
+                                    ->label('Email')
+                                    ->disabled(),
+                                Forms\Components\TextInput::make('password_status')
+                                    ->label('Status Password')
+                                    ->disabled()
+                                    ->placeholder('••••••••••••')
+                                    ->helperText('Password tidak ditampilkan untuk keamanan'),
+                            ]),
+
+                        // Data Kepala Sekolah
+                        Forms\Components\Section::make('Data Kepala Sekolah')
+                            ->schema([
+                                Forms\Components\TextInput::make('nip')
+                                    ->label('NIP')
+                                    ->disabled(),
+                                Forms\Components\TextInput::make('pangkat')
+                                    ->label('Pangkat')
+                                    ->disabled(),
+                                Forms\Components\TextInput::make('golongan')
+                                    ->label('Golongan')
+                                    ->disabled(),
+                                Forms\Components\TextInput::make('nama_lengkap')
+                                    ->label('Nama Lengkap')
+                                    ->disabled(),
+                                Forms\Components\Toggle::make('is_active')
+                                    ->label('Aktif')
+                                    ->disabled(),
+                            ]),
+                    ])
+                    ->mutateRecordDataUsing(function (array $data, $record): array {
+                        // Menyiapkan data user untuk ditampilkan
+                        if ($record->user) {
+                            $data['user']['name'] = $record->user->name;
+                            $data['user']['email'] = $record->user->email;
+                            // Tampilkan status password (bukan password asli)
+                            $data['password_status'] = $record->user->password ? '' : 'Password belum diatur';
+                        }
+                        return $data;
+                    }),
                 Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([

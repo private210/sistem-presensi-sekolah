@@ -32,6 +32,7 @@ class HariLiburResource extends Resource
                     ->required()
                     ->displayFormat('d/m/Y')
                     ->native(false)
+                    ->placeholder('Pilih tanggal mulai')
                     ->closeOnDateSelection()
                     ->live()
                     ->afterStateUpdated(function ($state, Forms\Get $get, Forms\Set $set) {
@@ -45,6 +46,7 @@ class HariLiburResource extends Resource
                     ->label('Tanggal Selesai')
                     ->displayFormat('d/m/Y')
                     ->native(false)
+                    ->placeholder('Pilih tanggal selesai (opsional)')
                     ->closeOnDateSelection()
                     ->minDate(fn(Forms\Get $get) => $get('tanggal_mulai'))
                     ->helperText('Kosongkan jika hanya 1 hari libur'),
@@ -53,6 +55,7 @@ class HariLiburResource extends Resource
                     ->label('Keterangan')
                     ->maxLength(500)
                     ->rows(3)
+                    ->placeholder('Contoh: Libur Nasional, Hari Raya, dll')
                     ->columnSpanFull(),
             ]);
     }
@@ -69,12 +72,14 @@ class HariLiburResource extends Resource
                 Tables\Columns\TextColumn::make('tanggal_mulai')
                     ->label('Tanggal Mulai')
                     ->date('d M Y')
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('tanggal_selesai')
                     ->label('Tanggal Selesai')
                     ->date('d M Y')
                     ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true)
                     ->placeholder('-')
                     ->description(
                         fn($record) =>
@@ -96,6 +101,7 @@ class HariLiburResource extends Resource
                 Tables\Columns\TextColumn::make('keterangan')
                     ->label('Keterangan')
                     ->limit(50)
+                    ->toggleable(isToggledHiddenByDefault: true)
                     ->tooltip(function (Tables\Columns\TextColumn $column): ?string {
                         $state = $column->getState();
                         if (strlen($state) <= 50) {
@@ -131,7 +137,7 @@ class HariLiburResource extends Resource
                     ->label('Dibuat Pada')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(isToggledHiddenByDefault: false),
             ])
             ->defaultSort('tanggal_mulai', 'desc')
             ->filters([
@@ -151,7 +157,7 @@ class HariLiburResource extends Resource
 
                         return match ($data['value']) {
                             'akan_datang' => $query->where('tanggal_mulai', '>', $today),
-                            'sedang_berlangsung' => $query->where('tanggal_mulai', '<=', $today)
+                            'sedang_berlangsung' => $query->where('tanggal_mulai', '=', $today)
                                 ->where(function ($q) use ($today) {
                                     $q->whereNull('tanggal_selesai')
                                         ->orWhere('tanggal_selesai', '>=', $today);

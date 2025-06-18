@@ -27,11 +27,13 @@ class SiswaResource extends Resource
                 Forms\Components\TextInput::make('nis')
                     ->label('NIS')
                     ->required()
+                    ->placeholder('Nomor Induk Siswa')
                     ->unique(ignoreRecord: true)
                     ->maxLength(20),
                 Forms\Components\TextInput::make('nama_lengkap')
                     ->label('Nama Lengkap')
                     ->required()
+                    ->placeholder('Masukkan nama lengkap siswa')
                     ->maxLength(255),
                 Forms\Components\Select::make('kelas_id')
                     ->label('Kelas')
@@ -66,16 +68,16 @@ class SiswaResource extends Resource
                 Forms\Components\Textarea::make('alamat')
                     ->label('Alamat')
                     ->maxLength(500)
-                    ->columnSpanFull(),
-                Forms\Components\FileUpload::make('foto')
-                    ->label('Foto')
-                    ->image()
-                    ->directory('siswa-photos')
-                    ->visibility('public')
-                    ->imageResizeMode('cover')
-                    ->imageCropAspectRatio('1:1')
-                    ->imageResizeTargetWidth('300')
-                    ->imageResizeTargetHeight('300'),
+                    ->placeholder('Masukkan alamat lengkap siswa'),
+                // Forms\Components\FileUpload::make('foto')
+                //     ->label('Foto')
+                //     ->image()
+                //     ->directory('siswa-photos')
+                //     ->visibility('public')
+                //     ->imageResizeMode('cover')
+                //     ->imageCropAspectRatio('1:1')
+                //     ->imageResizeTargetWidth('300')
+                //     ->imageResizeTargetHeight('300'),
                 Forms\Components\Toggle::make('is_active')
                     ->label('Aktif')
                     ->required()
@@ -108,6 +110,12 @@ class SiswaResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->groups([
+                Tables\Grouping\Group::make('Kelas')
+                    ->column('kelas.nama_kelas')
+                    ->collapsible(),
+            ])
+            ->defaultGroup('Kelas')
             ->filters([
                 Tables\Filters\SelectFilter::make('kelas_id')
                     ->label('Kelas')

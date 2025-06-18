@@ -48,7 +48,7 @@ class RekapKepalaSekolah extends Page implements HasTable
 
     public function mount(): void
     {
-        if (!auth()->user()->hasRole('Kepala Sekolah') && !auth()->user()->hasRole('super_admin')) {
+        if (!auth()->user()->hasRole('Kepala Sekolah') && !auth()->user()->hasRole('super_admin') && !auth()->user()->hasRole('Admin')) {
             abort(403, 'Anda tidak memiliki akses ke halaman ini');
         }
 

@@ -61,23 +61,25 @@ class PresensiKelas extends Page implements HasForms, HasTable
     public $jumlah_siswa;
     public $status_hari = 'Hari Sekolah';
 
+    // Properties untuk tracking status penyimpanan - PERBAIKI BAGIAN INI
+    public $is_saved = false;
+    public $has_complete_attendance = false; // Tambah property baru
+    public $saved_dates = [];
+
     /**
      * Initialize component saat pertama kali dimuat
      */
     public function mount()
     {
-        // Set locale untuk Carbon ke bahasa Indonesia
         Carbon::setLocale('id');
 
-        // Cek authorization
         if (!auth()->user()->hasRole('Wali Kelas') && !auth()->user()->hasRole('super_admin')) {
             abort(403, 'Anda tidak memiliki akses ke halaman ini');
         }
 
-        // Set tanggal default ke hari ini
         $this->tanggal = Carbon::today()->format('Y-m-d');
+        $this->saved_dates = session()->get('presensi_saved_dates', []);
 
-        // Ambil data wali kelas yang login
         $waliKelas = auth()->user()->waliKelas;
         if ($waliKelas) {
             $this->kelas_id = $waliKelas->kelas_id;
@@ -90,6 +92,7 @@ class PresensiKelas extends Page implements HasForms, HasTable
                 $this->checkNonSchoolDay();
                 $this->setPertemuanKe();
                 $this->autoCreatePastAttendance();
+                $this->checkIfAlreadySaved();
             } else {
                 Notification::make()
                     ->title('Data kelas tidak ditemukan')
@@ -105,7 +108,46 @@ class PresensiKelas extends Page implements HasForms, HasTable
     }
 
     /**
-     * Auto create attendance untuk tanggal yang sudah lewat
+     * PERBAIKI METHOD INI - Check apakah presensi untuk tanggal ini sudah lengkap
+     */
+    protected function checkIfAlreadySaved()
+    {
+        if ($this->is_non_school_day) {
+            $this->is_saved = true;
+            $this->has_complete_attendance = true;
+            return;
+        }
+
+        // Hitung total siswa aktif
+        $totalSiswa = Siswa::where('kelas_id', $this->kelas_id)
+            ->where('is_active', true)
+            ->count();
+
+        // Hitung total presensi yang sudah ada untuk tanggal ini
+        $totalPresensi = Presensi::where('kelas_id', $this->kelas_id)
+            ->where('tanggal_presensi', $this->tanggal)
+            ->count();
+
+        // Set status berdasarkan kelengkapan data
+        $this->has_complete_attendance = ($totalSiswa > 0 && $totalSiswa === $totalPresensi);
+        $this->is_saved = $this->has_complete_attendance;
+
+        // Tambahan: cek juga dari session untuk memastikan
+        if (!$this->is_saved && in_array($this->tanggal, $this->saved_dates)) {
+            // Double check dari database
+            $totalPresensiCheck = Presensi::where('kelas_id', $this->kelas_id)
+                ->where('tanggal_presensi', $this->tanggal)
+                ->count();
+
+            if ($totalPresensiCheck >= $totalSiswa) {
+                $this->is_saved = true;
+                $this->has_complete_attendance = true;
+            }
+        }
+    }
+
+    /**
+     * PERBAIKI METHOD INI - Auto create attendance untuk tanggal yang sudah lewat
      */
     protected function autoCreatePastAttendance()
     {
@@ -122,12 +164,27 @@ class PresensiKelas extends Page implements HasForms, HasTable
             return;
         }
 
-        $waliKelasId = auth()->user()->waliKelas->id;
+        // Cek apakah sudah ada presensi lengkap untuk tanggal ini
+        $totalSiswa = Siswa::where('kelas_id', $this->kelas_id)
+            ->where('is_active', true)
+            ->count();
 
-        // Ambil semua siswa aktif di kelas
+        $totalPresensi = Presensi::where('kelas_id', $this->kelas_id)
+            ->where('tanggal_presensi', $this->tanggal)
+            ->count();
+
+        // Jika sudah lengkap, skip
+        if ($totalPresensi >= $totalSiswa) {
+            return;
+        }
+
+        $waliKelasId = auth()->user()->waliKelas->id;
         $siswa = Siswa::where('kelas_id', $this->kelas_id)
             ->where('is_active', true)
             ->get();
+
+        $createdCount = 0;
+        $updatedCount = 0;
 
         foreach ($siswa as $s) {
             // Cek apakah sudah ada presensi
@@ -135,8 +192,9 @@ class PresensiKelas extends Page implements HasForms, HasTable
                 ->where('tanggal_presensi', $this->tanggal)
                 ->first();
 
+            // Skip jika sudah ada presensi
             if ($existingPresensi) {
-                continue; // Skip jika sudah ada
+                continue;
             }
 
             // Cek apakah ada izin yang disetujui
@@ -147,7 +205,7 @@ class PresensiKelas extends Page implements HasForms, HasTable
                 ->first();
 
             $status = 'Hadir';
-            $keterangan = 'Presensi Otomatis Hadir (Karena tidak melakukan presensi manual)';
+            $keterangan = 'Presensi otomatis (tanggal terlewat)';
 
             if ($izin) {
                 $status = $izin->jenis_izin;
@@ -164,7 +222,89 @@ class PresensiKelas extends Page implements HasForms, HasTable
                 'keterangan' => $keterangan,
                 'pertemuan_ke' => $this->pertemuan_ke,
             ]);
+            $createdCount++;
         }
+
+        // Notifikasi jika ada yang dibuat
+        if ($createdCount > 0) {
+            $message = "Auto presensi untuk tanggal " . Carbon::parse($this->tanggal)->format('d/m/Y') . ": {$createdCount} siswa dibuat otomatis";
+
+            Notification::make()
+                ->title('Presensi Otomatis')
+                ->body($message)
+                ->info()
+                ->send();
+        }
+    }
+
+    /**
+     * HAPUS METHOD INI atau buat optional - Batch auto create untuk multiple dates
+     */
+    public function batchAutoCreatePastAttendance()
+    {
+        // Bisa dihapus atau dibuat optional/admin only
+        if (!auth()->user()->hasRole('super_admin')) {
+            Notification::make()
+                ->title('Akses ditolak')
+                ->body('Fitur ini hanya untuk admin')
+                ->warning()
+                ->send();
+            return;
+        }
+
+        $today = Carbon::today();
+        $startOfMonth = Carbon::today()->startOfMonth();
+
+        $currentDate = $startOfMonth->copy();
+        $processedDates = [];
+        $totalCreated = 0;
+
+        while ($currentDate->lt($today)) {
+            if (!$this->isNonSchoolDay($currentDate)) {
+                $originalDate = $this->tanggal;
+                $this->tanggal = $currentDate->format('Y-m-d');
+
+                $this->checkNonSchoolDay();
+                $this->setPertemuanKe();
+
+                $beforeCount = Presensi::where('kelas_id', $this->kelas_id)
+                    ->where('tanggal_presensi', $this->tanggal)
+                    ->count();
+
+                $this->autoCreatePastAttendance();
+
+                $afterCount = Presensi::where('kelas_id', $this->kelas_id)
+                    ->where('tanggal_presensi', $this->tanggal)
+                    ->count();
+
+                if ($afterCount > $beforeCount) {
+                    $processedDates[] = $currentDate->format('d/m/Y');
+                    $totalCreated += ($afterCount - $beforeCount);
+                }
+
+                $this->tanggal = $originalDate;
+            }
+
+            $currentDate->addDay();
+        }
+
+        if (count($processedDates) > 0) {
+            Notification::make()
+                ->title('Batch Auto Presensi Selesai')
+                ->body("Diproses: {$totalCreated} presensi untuk " . count($processedDates) . " hari sekolah")
+                ->success()
+                ->send();
+        } else {
+            Notification::make()
+                ->title('Tidak ada presensi yang perlu dibuat')
+                ->info()
+                ->send();
+        }
+
+        $this->checkNonSchoolDay();
+        $this->setPertemuanKe();
+        $this->loadSiswaList();
+        $this->checkIfAlreadySaved();
     }
 
     /**
@@ -180,12 +320,10 @@ class PresensiKelas extends Page implements HasForms, HasTable
         $this->siswa_list = [];
 
         foreach ($siswa as $s) {
-            // Cek presensi yang sudah ada
             $presensi = Presensi::where('siswa_id', $s->id)
                 ->where('tanggal_presensi', $this->tanggal)
                 ->first();
 
-            // Cek izin yang disetujui
             $izin = Izin::where('siswa_id', $s->id)
                 ->where('status', 'Disetujui')
                 ->where('tanggal_mulai', '<=', $this->tanggal)
@@ -197,15 +335,13 @@ class PresensiKelas extends Page implements HasForms, HasTable
             $has_izin = false;
             $izin_id = null;
 
-            // Set default status berdasarkan kondisi hari
             if ($this->is_non_school_day) {
-                $status = null; // Null untuk hari libur
+                $status = null;
                 if ($this->is_weekend) {
                     $keterangan = 'Hari libur akhir pekan - ' . $this->weekend_info->day_name;
                 } elseif ($this->is_holiday) {
                     $keterangan = 'Hari libur resmi - ' . $this->holiday_info->nama_hari_libur;
 
-                    // Tambahkan info rentang tanggal jika lebih dari 1 hari
                     if (
                         $this->holiday_info->tanggal_selesai &&
                         !$this->holiday_info->tanggal_mulai->equalTo($this->holiday_info->tanggal_selesai)
@@ -215,10 +351,9 @@ class PresensiKelas extends Page implements HasForms, HasTable
                     }
                 }
             } else {
-                $status = 'Hadir'; // Default hadir untuk hari sekolah
+                $status = 'Hadir';
             }
 
-            // Override dengan izin jika ada
             if ($izin && !$this->is_non_school_day) {
                 $status = $izin->jenis_izin;
                 $keterangan = $izin->keterangan;
@@ -226,7 +361,6 @@ class PresensiKelas extends Page implements HasForms, HasTable
                 $izin_id = $izin->id;
             }
 
-            // Override dengan presensi yang sudah ada
             if ($presensi) {
                 $status = $presensi->status;
                 $keterangan = $presensi->keterangan ?? $keterangan;
@@ -253,21 +387,16 @@ class PresensiKelas extends Page implements HasForms, HasTable
         $this->jumlah_siswa = count($this->siswa_list);
     }
 
-    /**
-     * Cek apakah tanggal yang dipilih adalah hari libur
-     */
     protected function checkNonSchoolDay()
     {
         $date = Carbon::parse($this->tanggal);
 
-        // Reset status
         $this->is_holiday = false;
         $this->is_weekend = false;
         $this->is_non_school_day = false;
         $this->holiday_info = null;
         $this->weekend_info = null;
 
-        // Cek weekend
         if ($date->dayOfWeek === Carbon::SATURDAY || $date->dayOfWeek === Carbon::SUNDAY) {
             $this->is_weekend = true;
             $this->is_non_school_day = true;
@@ -278,7 +407,6 @@ class PresensiKelas extends Page implements HasForms, HasTable
             ];
         }
 
-        // Cek hari libur resmi dengan range tanggal
         $holiday = HariLibur::where('tanggal_mulai', '<=', $this->tanggal)
             ->where(function ($query) {
                 $query->whereNull('tanggal_selesai')
@@ -296,9 +424,6 @@ class PresensiKelas extends Page implements HasForms, HasTable
         $this->updateStatusHari();
     }
 
-    /**
-     * Update status hari untuk ditampilkan di form
-     */
     protected function updateStatusHari()
     {
         if ($this->is_weekend) {
@@ -310,17 +435,12 @@ class PresensiKelas extends Page implements HasForms, HasTable
         }
     }
 
-    /**
-     * Helper untuk cek apakah tanggal tertentu adalah hari libur
-     */
     protected function isNonSchoolDay(Carbon $date): bool
     {
-        // Cek weekend
         if ($date->dayOfWeek === Carbon::SATURDAY || $date->dayOfWeek === Carbon::SUNDAY) {
             return true;
         }
 
-        // Cek hari libur dengan range tanggal
         $holiday = HariLibur::where('tanggal_mulai', '<=', $date->format('Y-m-d'))
             ->where(function ($query) use ($date) {
                 $query->whereNull('tanggal_selesai')
@@ -332,15 +452,11 @@ class PresensiKelas extends Page implements HasForms, HasTable
         return $holiday;
     }
 
-    /**
-     * Hitung pertemuan ke berapa berdasarkan hari sekolah
-     */
     protected function setPertemuanKe()
     {
         $selectedDate = Carbon::parse($this->tanggal);
         $firstDayOfMonth = $selectedDate->copy()->firstOfMonth();
 
-        // Cari hari sekolah pertama di bulan ini
         $currentDay = $firstDayOfMonth->copy();
         $firstSchoolDay = null;
         while ($currentDay->lte($selectedDate)) {
@@ -351,11 +467,9 @@ class PresensiKelas extends Page implements HasForms, HasTable
             $currentDay->addDay();
         }
 
-        // Jika tanggal yang dipilih adalah hari sekolah pertama
         if ($firstSchoolDay && $selectedDate->equalTo($firstSchoolDay)) {
             $this->pertemuan_ke = 1;
         } else {
-            // Hitung jumlah hari sekolah dari hari sekolah pertama sampai tanggal yang dipilih
             if ($firstSchoolDay && $selectedDate->gt($firstSchoolDay) && !$this->isNonSchoolDay($selectedDate)) {
                 $schoolDaysCount = 0;
                 $checkDate = $firstSchoolDay->copy()->addDay();
@@ -372,7 +486,6 @@ class PresensiKelas extends Page implements HasForms, HasTable
             }
         }
 
-        // Untuk hari libur, ambil pertemuan_ke terakhir
         if ($this->isNonSchoolDay($selectedDate)) {
             $latestPresensi = Presensi::where('kelas_id', $this->kelas_id)
                 ->where('tanggal_presensi', '<', $this->tanggal)
@@ -382,9 +495,6 @@ class PresensiKelas extends Page implements HasForms, HasTable
         }
     }
 
-    /**
-     * Definisi form untuk input tanggal dan informasi kelas
-     */
     public function form(Form $form): Form
     {
         return $form
@@ -394,6 +504,8 @@ class PresensiKelas extends Page implements HasForms, HasTable
                         DatePicker::make('tanggal')
                             ->label('Tanggal')
                             ->required()
+                            ->timezone('Asia/Jakarta')
+                            ->format('d/m/Y')
                             ->default(now())
                             ->live()
                             ->afterStateUpdated(function () {
@@ -401,6 +513,7 @@ class PresensiKelas extends Page implements HasForms, HasTable
                                 $this->checkNonSchoolDay();
                                 $this->setPertemuanKe();
                                 $this->autoCreatePastAttendance();
+                                $this->checkIfAlreadySaved();
                             }),
                         TextInput::make('pertemuan_ke')
                             ->label('Hari Ke')
@@ -431,7 +544,7 @@ class PresensiKelas extends Page implements HasForms, HasTable
     }
 
     /**
-     * Simpan semua data presensi
+     * PERBAIKI METHOD INI - Simpan semua data presensi
      */
     public function savePresensi()
     {
@@ -451,7 +564,19 @@ class PresensiKelas extends Page implements HasForms, HasTable
             return;
         }
 
+        // Validasi jika sudah tersimpan lengkap
+        if ($this->has_complete_attendance) {
+            Notification::make()
+                ->title('Presensi sudah lengkap!')
+                ->body('Semua siswa sudah memiliki data presensi untuk tanggal ini.')
+                ->info()
+                ->send();
+            return;
+        }
+
         $waliKelasId = auth()->user()->waliKelas->id;
+        $savedCount = 0;
+        $updatedCount = 0;
 
         foreach ($this->siswa_list as $siswa) {
             // Skip jika status null
@@ -459,20 +584,18 @@ class PresensiKelas extends Page implements HasForms, HasTable
                 continue;
             }
 
-            // Cek apakah sudah ada presensi
             $presensi = Presensi::where('siswa_id', $siswa['siswa_id'])
                 ->where('tanggal_presensi', $this->tanggal)
                 ->first();
 
             if ($presensi) {
-                // Update presensi yang sudah ada
                 $presensi->update([
                     'status' => $siswa['status'],
                     'keterangan' => $siswa['keterangan'] ?? null,
                     'pertemuan_ke' => $this->pertemuan_ke,
                 ]);
+                $updatedCount++;
             } else {
-                // Create presensi baru
                 Presensi::create([
                     'siswa_id' => $siswa['siswa_id'],
                     'kelas_id' => $this->kelas_id,
@@ -482,21 +605,38 @@ class PresensiKelas extends Page implements HasForms, HasTable
                     'keterangan' => $siswa['keterangan'] ?? null,
                     'pertemuan_ke' => $this->pertemuan_ke,
                 ]);
+                $savedCount++;
             }
         }
 
+        // PENTING: Set status setelah berhasil simpan
+        $this->is_saved = true;
+        $this->has_complete_attendance = true;
+
+        // Simpan ke session
+        if (!in_array($this->tanggal, $this->saved_dates)) {
+            $this->saved_dates[] = $this->tanggal;
+            session()->put('presensi_saved_dates', $this->saved_dates);
+        }
+
+        $message = 'Presensi berhasil disimpan! ';
+        if ($savedCount > 0) {
+            $message .= "{$savedCount} siswa ditambahkan";
+        }
+        if ($updatedCount > 0) {
+            $message .= ($savedCount > 0 ? ", " : "") . "{$updatedCount} siswa diperbarui";
+        }
+
         Notification::make()
-            ->title('Presensi berhasil disimpan!')
+            ->title($message)
             ->success()
             ->send();
 
         // Reload data
         $this->loadSiswaList();
+        $this->checkIfAlreadySaved(); // Re-check status
     }
 
-    /**
-     * Auto create presensi untuk siswa yang belum ada presensinya
-     */
     public function autoCreateMissingAttendance()
     {
         if ($this->is_non_school_day) {
@@ -511,12 +651,10 @@ class PresensiKelas extends Page implements HasForms, HasTable
         $createdCount = 0;
 
         foreach ($this->siswa_list as $siswa) {
-            // Skip jika sudah ada presensi
             if ($siswa['presensi_id']) {
                 continue;
             }
 
-            // Skip jika status null
             if ($siswa['status'] === null) {
                 continue;
             }
@@ -541,6 +679,7 @@ class PresensiKelas extends Page implements HasForms, HasTable
                 ->send();
 
             $this->loadSiswaList();
+            $this->checkIfAlreadySaved();
         } else {
             Notification::make()
                 ->title('Tidak ada presensi yang perlu dibuat')
@@ -549,9 +688,6 @@ class PresensiKelas extends Page implements HasForms, HasTable
         }
     }
 
-    /**
-     * Definisi tabel untuk menampilkan data siswa
-     */
     public function table(Table $table): Table
     {
         return $table
@@ -705,7 +841,6 @@ class PresensiKelas extends Page implements HasForms, HasTable
                         return ['status' => 'Hadir', 'keterangan' => ''];
                     })
                     ->action(function (Siswa $record, array $data): void {
-                        // Update status di array siswa_list
                         foreach ($this->siswa_list as $key => $siswa) {
                             if ($siswa['siswa_id'] === $record->id) {
                                 $this->siswa_list[$key]['status'] = $data['status'];
@@ -714,6 +849,9 @@ class PresensiKelas extends Page implements HasForms, HasTable
                             }
                         }
 
+                        // Set ulang status jika ada perubahan
+                        $this->checkIfAlreadySaved();
+
                         Notification::make()
                             ->title('Status presensi diperbarui!')
                             ->success()
@@ -721,6 +859,18 @@ class PresensiKelas extends Page implements HasForms, HasTable
                     }),
             ])
             ->headerActions([
+                // UBAH/HAPUS ACTION INI - Batch auto create (buat optional/admin only)
+                Action::make('batch_auto_create')
+                    ->label('Auto Presensi Bulan Ini')
+                    ->color('warning')
+                    ->icon('heroicon-o-calendar-days')
+                    ->action(fn() => $this->batchAutoCreatePastAttendance())
+                    ->requiresConfirmation()
+                    ->modalHeading('Konfirmasi Auto Presensi')
+                    ->modalDescription('Sistem akan membuat presensi otomatis untuk semua tanggal yang terlewat di bulan ini. Lanjutkan?')
+                    ->modalSubmitActionLabel('Ya, Proses Otomatis')
+                    ->visible(fn() => auth()->user()->hasRole('super_admin')), // HANYA ADMIN
+
                 Action::make('refresh_data')
                     ->label('Refresh Data')
                     ->color('gray')
@@ -729,34 +879,55 @@ class PresensiKelas extends Page implements HasForms, HasTable
                         $this->loadSiswaList();
                         $this->checkNonSchoolDay();
                         $this->setPertemuanKe();
+                        $this->checkIfAlreadySaved();
 
                         Notification::make()
                             ->title('Data berhasil diperbarui!')
                             ->success()
                             ->send();
                     }),
-                Action::make('auto_create_attendance')
-                    ->label('Buat Presensi Otomatis')
-                    ->color('warning')
-                    ->icon('heroicon-o-user-plus')
-                    ->action(fn() => $this->autoCreateMissingAttendance())
-                    ->disabled(fn() => $this->is_non_school_day)
-                    ->requiresConfirmation()
-                    ->modalHeading('Konfirmasi Buat Presensi Otomatis')
-                    ->modalDescription('Sistem akan membuat record presensi "Hadir" untuk siswa yang belum memiliki presensi pada tanggal ini. Lanjutkan?')
-                    ->modalSubmitActionLabel('Ya, Buat Otomatis'),
+
+                // PERBAIKI ACTION INI - Tombol simpan dengan kondisi yang tepat
                 Action::make('save_all')
-                    ->label('Simpan Presensi')
-                    ->color('success')
-                    ->icon('heroicon-o-check')
+                    ->label(function () {
+                        if ($this->has_complete_attendance) {
+                            return 'Presensi Sudah Lengkap';
+                        } elseif ($this->is_saved) {
+                            return 'Presensi Sudah Disimpan';
+                        } else {
+                            return 'Simpan Presensi';
+                        }
+                    })
+                    ->color(function () {
+                        if ($this->has_complete_attendance || $this->is_saved) {
+                            return 'success'; // Hijau untuk yang sudah selesai
+                        } else {
+                            return 'primary'; // Biru untuk yang belum
+                        }
+                    })
+                    ->icon(function () {
+                        if ($this->has_complete_attendance || $this->is_saved) {
+                            return 'heroicon-o-check-circle';
+                        } else {
+                            return 'heroicon-o-check';
+                        }
+                    })
                     ->action(fn() => $this->savePresensi())
-                    ->disabled(fn() => $this->is_non_school_day),
+                    ->disabled(function () {
+                        return $this->is_non_school_day || $this->has_complete_attendance;
+                    })
+                    ->tooltip(function () {
+                        if ($this->is_non_school_day) {
+                            return 'Tidak dapat melakukan presensi pada hari libur';
+                        } elseif ($this->has_complete_attendance) {
+                            return 'Presensi untuk tanggal ini sudah lengkap';
+                        } else {
+                            return null;
+                        }
+                    }),
             ]);
     }
 
-    /**
-     * Helper untuk mendapatkan status dari record siswa
-     */
     private function getStatusForRecord(Siswa $record): ?string
     {
         foreach ($this->siswa_list as $siswa) {
@@ -768,11 +939,11 @@ class PresensiKelas extends Page implements HasForms, HasTable
     }
 
     /**
-     * Static method untuk auto generate presensi harian (bisa dipanggil dari scheduler)
+     * PERBAIKI METHOD INI - Static method untuk auto generate presensi harian
      */
     public static function autoGenerateDailyAttendance($date = null)
     {
-        $date = $date ?: Carbon::today()->format('Y-m-d');
+        $date = $date ?: Carbon::yesterday()->format('Y-m-d'); // DEFAULT KE KEMARIN
         $carbonDate = Carbon::parse($date);
 
         // Skip jika weekend
@@ -780,7 +951,7 @@ class PresensiKelas extends Page implements HasForms, HasTable
             return false;
         }
 
-        // Skip jika hari libur dengan range tanggal
+        // Skip jika hari libur
         $holiday = HariLibur::where('tanggal_mulai', '<=', $date)
             ->where(function ($query) use ($date) {
                 $query->whereNull('tanggal_selesai')
@@ -793,18 +964,29 @@ class PresensiKelas extends Page implements HasForms, HasTable
             return false;
         }
 
-        // Process untuk semua wali kelas
         $waliKelasList = WaliKelas::with('kelas')->get();
 
         foreach ($waliKelasList as $waliKelas) {
             if (!$waliKelas->kelas) continue;
 
-            // Ambil semua siswa aktif di kelas
+            // CEK APAKAH SUDAH ADA PRESENSI LENGKAP
+            $totalSiswa = Siswa::where('kelas_id', $waliKelas->kelas_id)
+                ->where('is_active', true)
+                ->count();
+
+            $existingPresensi = Presensi::where('kelas_id', $waliKelas->kelas_id)
+                ->where('tanggal_presensi', $date)
+                ->count();
+
+            // SKIP jika sudah lengkap
+            if ($existingPresensi >= $totalSiswa) {
+                continue;
+            }
+
             $siswaList = Siswa::where('kelas_id', $waliKelas->kelas_id)
                 ->where('is_active', true)
                 ->get();
 
-            // Hitung pertemuan_ke dengan benar
             $pertemuan_ke = self::calculatePertemuanKe($waliKelas->kelas_id, $date);
 
             foreach ($siswaList as $siswa) {
@@ -814,7 +996,7 @@ class PresensiKelas extends Page implements HasForms, HasTable
                     ->first();
 
                 if ($existingPresensi) {
-                    continue;
+                    continue; // SKIP jika sudah ada
                 }
 
                 // Cek izin
@@ -848,26 +1030,20 @@ class PresensiKelas extends Page implements HasForms, HasTable
         return true;
     }
 
-    /**
-     * Helper method untuk menghitung pertemuan_ke dengan benar
-     */
     protected static function calculatePertemuanKe($kelasId, $date): int
     {
         $selectedDate = Carbon::parse($date);
         $firstDayOfMonth = $selectedDate->copy()->firstOfMonth();
 
-        // Hitung hari sekolah dari awal bulan sampai tanggal yang dipilih
         $schoolDaysCount = 0;
         $currentDay = $firstDayOfMonth->copy();
 
         while ($currentDay->lte($selectedDate)) {
-            // Skip weekend
             if ($currentDay->dayOfWeek === Carbon::SATURDAY || $currentDay->dayOfWeek === Carbon::SUNDAY) {
                 $currentDay->addDay();
                 continue;
             }
 
-            // Skip hari libur
             $isHoliday = HariLibur::where('tanggal_mulai', '<=', $currentDay->format('Y-m-d'))
                 ->where(function ($query) use ($currentDay) {
                     $query->whereNull('tanggal_selesai')
@@ -886,3 +1062,4 @@ class PresensiKelas extends Page implements HasForms, HasTable
         return $schoolDaysCount;
     }
 }
+
