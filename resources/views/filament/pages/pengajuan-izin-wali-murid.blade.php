@@ -63,7 +63,7 @@
                 </div>
 
                 {{-- Loading State - Dipindahkan ke bawah tombol --}}
-                <div wire:loading wire:target="create" class="mt-4 flex justify-center items-center">
+                <div wire:loading wire:target="create" class="mt-5 flex justify-center items-center">
                     <div class="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-lg flex items-center space-x-3">
                         <svg class="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

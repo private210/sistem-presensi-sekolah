@@ -216,7 +216,8 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
                             ->using(fn($query) => $query->count())
                     ]),
                 TextColumn::make('pertemuan_ke')
-                    ->label('Pertemuan')
+                    ->label('Hari')
+                    ->alignCenter()
                     ->sortable(),
                 TextColumn::make('keterangan')
                     ->label('Keterangan')
@@ -320,16 +321,10 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
             ])
             ->groups([
                 Group::make('pertemuan_ke')
-                    ->label('Pertemuan')
+                    ->label('Hari')
                     ->collapsible()
                     ->titlePrefixedWithLabel(false)
                     ->getTitleFromRecordUsing(fn($record) => 'Pertemuan ke-' . $record->pertemuan_ke),
-                Group::make('siswa.nama_lengkap')
-                    ->label('Siswa')
-                    ->collapsible(),
-                Group::make('kelas.nama_kelas')
-                    ->label('Kelas')
-                    ->collapsible(),
                 Group::make('status')
                     ->label('Status')
                     ->collapsible(),

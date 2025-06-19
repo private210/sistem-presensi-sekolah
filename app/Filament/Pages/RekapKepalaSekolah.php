@@ -11,6 +11,10 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\Grid;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Tables\Actions\Action as TableAction;
@@ -28,9 +32,9 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Session;
 
-class RekapKepalaSekolah extends Page implements HasTable
+class RekapKepalaSekolah extends Page implements HasForms, HasTable
 {
-    use InteractsWithTable;
+    use InteractsWithForms, InteractsWithTable;
     use HasPageShield;
 
     protected static ?string $navigationIcon = 'heroicon-o-presentation-chart-line';
@@ -67,16 +71,96 @@ class RekapKepalaSekolah extends Page implements HasTable
                 // Semester Ganjil (Juli - Desember)
                 $this->tanggal_mulai = Carbon::create($currentYear, 7, 1)->format('Y-m-d');
                 $this->tanggal_selesai = Carbon::create($currentYear, 12, 31)->format('Y-m-d');
+                $this->selected_semester = 'ganjil';
             } else {
                 // Semester Genap (Januari - Juni)
                 $this->tanggal_mulai = Carbon::create($currentYear, 1, 1)->format('Y-m-d');
                 $this->tanggal_selesai = Carbon::create($currentYear, 6, 30)->format('Y-m-d');
+                $this->selected_semester = 'genap';
             }
         } else {
             // Default untuk bulan
             $this->tanggal_mulai = Carbon::now()->startOfMonth()->format('Y-m-d');
             $this->tanggal_selesai = Carbon::now()->format('Y-m-d');
         }
+    }
+
+    public function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Grid::make(4)
+                    ->schema([
+                        Radio::make('periode_type')
+                            ->label('Periode')
+                            ->options([
+                                'bulan' => 'Per Bulan',
+                                'semester' => 'Per Semester',
+                            ])
+                            ->default($this->periode_type)
+                            ->reactive()
+                            ->afterStateUpdated(function ($state) {
+                                $this->periode_type = $state;
+                                $this->setPeriodeDefaults();
+                                $this->resetTable();
+                                $this->dispatch('form-updated');
+                            }),
+                        DatePicker::make('tanggal_mulai')
+                            ->label('Dari Tanggal')
+                            ->required()
+                            ->default($this->tanggal_mulai)
+                            ->reactive()
+                            ->visible(fn($get) => $get('periode_type') === 'bulan')
+                            ->afterStateUpdated(function ($state) {
+                                $this->tanggal_mulai = $state;
+                                $this->dispatch('form-updated');
+                            }),
+                        DatePicker::make('tanggal_selesai')
+                            ->label('Sampai Tanggal')
+                            ->required()
+                            ->default($this->tanggal_selesai)
+                            ->reactive()
+                            ->visible(fn($get) => $get('periode_type') === 'bulan')
+                            ->afterStateUpdated(function ($state) {
+                                $this->tanggal_selesai = $state;
+                                $this->dispatch('form-updated');
+                            }),
+                        Select::make('semester')
+                            ->label('Pilih Semester')
+                            ->options([
+                                'ganjil' => 'Semester Ganjil (Juli - Desember)',
+                                'genap' => 'Semester Genap (Januari - Juni)',
+                            ])
+                            ->default($this->selected_semester)
+                            ->visible(fn($get) => $get('periode_type') === 'semester')
+                            ->reactive()
+                            ->afterStateUpdated(function ($state) {
+                                $this->selected_semester = $state;
+                                $currentYear = Carbon::now()->year;
+                                if ($state === 'ganjil') {
+                                    $this->tanggal_mulai = Carbon::create($currentYear, 7, 1)->format('Y-m-d');
+                                    $this->tanggal_selesai = Carbon::create($currentYear, 12, 31)->format('Y-m-d');
+                                } else {
+                                    $this->tanggal_mulai = Carbon::create($currentYear, 1, 1)->format('Y-m-d');
+                                    $this->tanggal_selesai = Carbon::create($currentYear, 6, 30)->format('Y-m-d');
+                                }
+                                $this->resetTable();
+                                $this->dispatch('form-updated');
+                            }),
+                        Select::make('kelas_id')
+                            ->label('Kelas')
+                            ->placeholder('Semua Kelas')
+                            ->options(['' => 'Semua Kelas'] + Kelas::pluck('nama_kelas', 'id')->toArray())
+                            ->searchable()
+                            ->default($this->kelas_id)
+                            ->reactive()
+                            ->afterStateUpdated(function ($state) {
+                                $this->kelas_id = $state;
+                                $this->resetTable();
+                                $this->dispatch('form-updated');
+                            }),
+                    ]),
+            ]);
     }
 
     public function table(Table $table): Table
@@ -117,7 +201,7 @@ class RekapKepalaSekolah extends Page implements HasTable
                         default => 'gray',
                     }),
                 TextColumn::make('pertemuan_ke')
-                    ->label('Pertemuan')
+                    ->label('Hari Ke')
                     ->sortable(),
                 TextColumn::make('keterangan')
                     ->label('Keterangan')
@@ -125,10 +209,6 @@ class RekapKepalaSekolah extends Page implements HasTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                SelectFilter::make('kelas_id')
-                    ->label('Kelas')
-                    ->options(Kelas::pluck('nama_kelas', 'id'))
-                    ->attribute('kelas_id'),
                 SelectFilter::make('status')
                     ->label('Status')
                     ->options([
@@ -138,59 +218,6 @@ class RekapKepalaSekolah extends Page implements HasTable
                         'Tanpa Keterangan' => 'Tanpa Keterangan',
                         'Alpa' => 'Alpa',
                     ]),
-                Filter::make('periode_filter')
-                    ->form([
-                        Radio::make('periode_type')
-                            ->label('Periode')
-                            ->options([
-                                'semester' => 'Per Semester',
-                                'bulan' => 'Per Bulan',
-                            ])
-                            ->default($this->periode_type)
-                            ->reactive()
-                            ->afterStateUpdated(function ($state) {
-                                $this->periode_type = $state;
-                                $this->setPeriodeDefaults();
-                                $this->resetTable();
-                            }),
-                        DatePicker::make('tanggal_mulai')
-                            ->label('Dari Tanggal')
-                            ->default($this->tanggal_mulai)
-                            ->visible(fn($get) => $get('periode_type') === 'bulan'),
-                        DatePicker::make('tanggal_selesai')
-                            ->label('Sampai Tanggal')
-                            ->default($this->tanggal_selesai)
-                            ->visible(fn($get) => $get('periode_type') === 'bulan'),
-                        Select::make('semester')
-                            ->label('Pilih Semester')
-                            ->options([
-                                'ganjil' => 'Semester Ganjil (Juli - Desember)',
-                                'genap' => 'Semester Genap (Januari - Juni)',
-                            ])
-                            ->default(fn() => Carbon::now()->month >= 7 ? 'ganjil' : 'genap')
-                            ->visible(fn($get) => $get('periode_type') === 'semester')
-                            ->afterStateUpdated(function ($state) {
-                                $currentYear = Carbon::now()->year;
-                                if ($state === 'ganjil') {
-                                    $this->tanggal_mulai = Carbon::create($currentYear, 7, 1)->format('Y-m-d');
-                                    $this->tanggal_selesai = Carbon::create($currentYear, 12, 31)->format('Y-m-d');
-                                } else {
-                                    $this->tanggal_mulai = Carbon::create($currentYear, 1, 1)->format('Y-m-d');
-                                    $this->tanggal_selesai = Carbon::create($currentYear, 6, 30)->format('Y-m-d');
-                                }
-                            }),
-                    ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when(
-                                $data['tanggal_mulai'] ?? null,
-                                fn(Builder $query, $date): Builder => $query->whereDate('tanggal_presensi', '>=', $date),
-                            )
-                            ->when(
-                                $data['tanggal_selesai'] ?? null,
-                                fn(Builder $query, $date): Builder => $query->whereDate('tanggal_presensi', '<=', $date),
-                            );
-                    }),
             ])
             ->groups([
                 Group::make('kelas.nama_kelas')
@@ -200,8 +227,8 @@ class RekapKepalaSekolah extends Page implements HasTable
                 Group::make('tanggal_presensi')
                     ->label('Tanggal')
                     ->collapsible(),
-                Group::make('status')
-                    ->label('Status')
+                Group::make('pertemuan_ke')
+                    ->label('Hari Ke')
                     ->collapsible(),
             ])
             ->defaultGroup('kelas.nama_kelas')
@@ -340,16 +367,16 @@ class RekapKepalaSekolah extends Page implements HasTable
             ]);
     }
 
-    protected function getHeaderWidgets(): array
-    {
-        return [
-            DashboardKepalaSekolahStats::class,
-        ];
-    }
-
     public function getKelasStats()
     {
-        return Kelas::withCount([
+        $query = Kelas::query();
+
+        // Jika ada filter kelas, hanya ambil kelas tersebut
+        if ($this->kelas_id) {
+            $query->where('id', $this->kelas_id);
+        }
+
+        return $query->withCount([
             'siswa as total_siswa',
             'presensi as total_hadir' => function ($query) {
                 $query->where('status', 'Hadir')
@@ -387,13 +414,63 @@ class RekapKepalaSekolah extends Page implements HasTable
             $query->where('kelas_id', $this->kelas_id);
         }
 
+        $totalData = $query->count();
+        $totalHadir = $query->clone()->where('status', 'Hadir')->count();
+        $totalIzin = $query->clone()->where('status', 'Izin')->count();
+        $totalSakit = $query->clone()->where('status', 'Sakit')->count();
+        $totalAlpha = $query->clone()->whereIn('status', ['Tanpa Keterangan', 'Alpa'])->count();
+        $totalSiswa = $query->clone()->distinct('siswa_id')->count();
+
+        // Hitung persentase
+        $hadirPersen = $totalData > 0 ? round(($totalHadir / $totalData) * 100, 2) : 0;
+        $izinPersen = $totalData > 0 ? round(($totalIzin / $totalData) * 100, 2) : 0;
+        $sakitPersen = $totalData > 0 ? round(($totalSakit / $totalData) * 100, 2) : 0;
+        $alphaPersen = $totalData > 0 ? round(($totalAlpha / $totalData) * 100, 2) : 0;
+
         return [
-            'total_data' => $query->count(),
-            'total_hadir' => $query->clone()->where('status', 'Hadir')->count(),
-            'total_izin' => $query->clone()->where('status', 'Izin')->count(),
-            'total_sakit' => $query->clone()->where('status', 'Sakit')->count(),
-            'total_alpha' => $query->clone()->whereIn('status', ['Tanpa Keterangan', 'Alpa'])->count(),
-            'total_siswa' => $query->clone()->distinct('siswa_id')->count(),
+            'total_data' => $totalData,
+            'total_hadir' => $totalHadir,
+            'total_izin' => $totalIzin,
+            'total_sakit' => $totalSakit,
+            'total_alpha' => $totalAlpha,
+            'total_siswa' => $totalSiswa,
+            'hadir_persen' => $hadirPersen,
+            'izin_persen' => $izinPersen,
+            'sakit_persen' => $sakitPersen,
+            'alpha_persen' => $alphaPersen,
         ];
+    }
+
+    // Event listeners untuk update reactive
+    public function updatedTanggalMulai()
+    {
+        $this->resetTable();
+        $this->dispatch('form-updated');
+    }
+
+    public function updatedTanggalSelesai()
+    {
+        $this->resetTable();
+        $this->dispatch('form-updated');
+    }
+
+    public function updatedKelasId()
+    {
+        $this->resetTable();
+        $this->dispatch('form-updated');
+    }
+
+    public function updatedPeriodeType()
+    {
+        $this->setPeriodeDefaults();
+        $this->resetTable();
+        $this->dispatch('form-updated');
+    }
+
+    public function updatedSelectedSemester()
+    {
+        $this->setPeriodeDefaults();
+        $this->resetTable();
+        $this->dispatch('form-updated');
     }
 }

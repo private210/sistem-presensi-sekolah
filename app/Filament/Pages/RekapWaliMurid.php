@@ -229,8 +229,9 @@ class RekapWaliMurid extends Page implements HasForms, HasTable
                     })
                     ->summarize(Count::make()->label('Total')),
                 TextColumn::make('pertemuan_ke')
-                    ->label('Pertemuan')
-                    ->sortable(),
+                    ->label('Hari Ke')
+                    ->sortable()
+                    ->alignCenter(),
                 TextColumn::make('keterangan')
                     ->label('Keterangan')
                     ->limit(50)
@@ -262,14 +263,9 @@ class RekapWaliMurid extends Page implements HasForms, HasTable
                     ->visible(fn() => !auth()->user()->hasRole(['Wali Murid'])),
             ])
             ->groups([
-                Group::make('siswa.nama_lengkap')
-                    ->label('Siswa')
-                    ->collapsible(),
-                Group::make('kelas.nama_kelas')
-                    ->label('Kelas')
-                    ->collapsible(),
-                Group::make('status')
-                    ->label('Status')
+                Group::make('pertemuan_ke')
+                    ->label('Hari Ke')
+                    ->column('pertemuan_ke')
                     ->collapsible(),
             ])
             ->headerActions([

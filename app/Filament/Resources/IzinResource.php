@@ -11,6 +11,9 @@ use Filament\Tables\Table;
 use Filament\Resources\Resource;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
+use Filament\Infolists\Components\Section;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ImageEntry;
 use App\Filament\Resources\IzinResource\Pages;
 
 class IzinResource extends Resource
@@ -159,8 +162,88 @@ class IzinResource extends Resource
                     ]),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make()
-                    ->slideOver(),
+            Tables\Actions\ViewAction::make()
+                ->label('Lihat Detail')
+                ->modalHeading('Detail Surat Izin')
+                ->infolist([
+                    Section::make('Informasi Siswa')
+                        ->schema([
+                            TextEntry::make('siswas.nama_lengkap')
+                                ->label('Nama Siswa'),
+                            TextEntry::make('siswas.nis')
+                                ->label('NIS'),
+                            TextEntry::make('siswas.kelas.nama_kelas')
+                                ->label('Kelas'),
+                        ])
+                        ->columns(3),
+
+                    Section::make('Detail Izin')
+                        ->schema([
+                            TextEntry::make('tanggal_mulai')
+                                ->label('Tanggal Mulai')
+                                ->date('d F Y'),
+                            TextEntry::make('tanggal_selesai')
+                                ->label('Tanggal Selesai')
+                                ->date('d F Y'),
+                            TextEntry::make('jenis_izin')
+                                ->label('Jenis Izin')
+                                ->badge()
+                                ->color(fn(string $state): string => match ($state) {
+                                    'Sakit' => 'warning',
+                                    'Izin' => 'info',
+                                    default => 'gray',
+                                }),
+                            TextEntry::make('status')
+                                ->label('Status')
+                                ->badge()
+                                ->color(fn(string $state): string => match ($state) {
+                                    'Menunggu' => 'gray',
+                                    'Disetujui' => 'success',
+                                    'Ditolak' => 'danger',
+                                    default => 'gray',
+                                }),
+                            TextEntry::make('keterangan')
+                                ->label('Keterangan'),
+                        ])->columns(2),
+                    Section::make('Bukti Pendukung')
+                        ->schema([
+                            ImageEntry::make('bukti_pendukung')
+                                ->label('Bukti Pendukung')
+                                ->disk('public') // sesuaikan dengan disk yang digunakan
+                                ->size(300)
+                                ->columnSpanFull()
+                                ->visible(fn($record) => $record->bukti_pendukung && self::isImage($record->bukti_pendukung)),
+                            TextEntry::make('bukti_pendukung')
+                                ->label('File Bukti Pendukung')
+                                ->state(fn($record) => basename($record->bukti_pendukung))
+                                ->url(fn($record) => $this->getFileUrl($record->bukti_pendukung))
+                                ->openUrlInNewTab()
+                                ->color('primary')
+                                ->icon('heroicon-o-document-arrow-down')
+                                ->visible(fn($record) => $record->bukti_pendukung && !self::isImage($record->bukti_pendukung)),
+                        ])
+                        ->columns(2),
+
+                    Section::make('Informasi Proses')
+                        ->schema([
+                            TextEntry::make('created_at')
+                                ->label('Tanggal Pengajuan')
+                                ->dateTime('d F Y H:i'),
+                            TextEntry::make('approved_at')
+                                ->label('Tanggal Diproses')
+                                ->dateTime('d F Y H:i')
+                                ->placeholder('-'),
+                            TextEntry::make('approvedBy.name')
+                                ->label('Diproses Oleh')
+                                ->placeholder('-'),
+                            TextEntry::make('catatan_approval')
+                                ->label('Catatan Persetujuan')
+                                ->placeholder('-')
+                                ->columnSpanFull()
+                                ->visible(fn($record) => $record->catatan_approval !== null),
+                        ])
+                        ->columns(3),
+                ]),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
                 Tables\Actions\Action::make('approve')
@@ -169,7 +252,7 @@ class IzinResource extends Resource
                     ->color('success')
                     ->visible(
                         fn(Izin $record) =>
-                        auth()->user()->hasRole(['Wali Kelas', 'Kepala Sekolah', 'super_admin']) &&
+                        auth()->user()->hasRole(['Wali Kelas', 'Admin', 'super_admin']) &&
                             $record->status === 'Menunggu'
                     )
                     ->action(function (Izin $record) {
@@ -185,7 +268,7 @@ class IzinResource extends Resource
                     ->color('danger')
                     ->visible(
                         fn(Izin $record) =>
-                        auth()->user()->hasRole(['Wali Kelas', 'Kepala Sekolah', 'super_admin']) &&
+                        auth()->user()->hasRole(['Wali Kelas', 'Admin', 'super_admin']) &&
                             $record->status === 'Menunggu'
                     )
                     ->action(function (Izin $record) {
@@ -244,5 +327,12 @@ class IzinResource extends Resource
                     $q->where('kelas_id', $waliKelas->kelas_id);
                 });
             });
+    }
+    protected static function isImage(string $filename): bool
+    {
+        $imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'];
+        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+        return in_array($extension, $imageExtensions);
     }
 }
