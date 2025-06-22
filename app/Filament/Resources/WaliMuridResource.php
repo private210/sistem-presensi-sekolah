@@ -180,7 +180,7 @@ class WaliMuridResource extends Resource
                 Tables\Actions\ViewAction::make('View')
                     ->icon('heroicon-o-eye')
                     ->label('Detail')
-                    ->modalHeading('Detail Kepala Sekolah')
+                    ->modalHeading('Detail Wali Murid')
                     ->form([
                         // Data User
                         Forms\Components\Section::make('Data Akun')
@@ -199,19 +199,26 @@ class WaliMuridResource extends Resource
                             ]),
 
                         // Data Kepala Sekolah
-                        Forms\Components\Section::make('Data Kepala Sekolah')
+                        Forms\Components\Section::make('Data Wali Murid')
                             ->schema([
-                                Forms\Components\TextInput::make('nip')
-                                    ->label('NIP')
-                                    ->disabled(),
-                                Forms\Components\TextInput::make('pangkat')
-                                    ->label('Pangkat')
-                                    ->disabled(),
-                                Forms\Components\TextInput::make('golongan')
-                                    ->label('Golongan')
-                                    ->disabled(),
                                 Forms\Components\TextInput::make('nama_lengkap')
                                     ->label('Nama Lengkap')
+                                    ->disabled(),
+                                Forms\Components\Select::make('hubungan')
+                                    ->label('Hubungan dengan Siswa')
+                                    ->options([
+                                        'Ayah' => 'Ayah',
+                                        'Ibu' => 'Ibu',
+                                        'Wali' => 'Wali',
+                                        'Lainnya' => 'Lainnya',
+                                    ])
+                                    ->disabled(),
+                                Forms\Components\Select::make('siswa.nama_lengkap')
+                                    ->label('Siswa')
+                                    ->options(
+                                        Siswa::where('is_active', true)
+                                            ->pluck('nama_lengkap', 'id')
+                                    )
                                     ->disabled(),
                                 Forms\Components\Toggle::make('is_active')
                                     ->label('Aktif')

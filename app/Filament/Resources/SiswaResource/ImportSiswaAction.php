@@ -39,11 +39,11 @@ class ImportSiswaAction
                                     <div>
                                         <h4 class="font-semibold text-gray-900 mb-2">📋 Kolom yang diperlukan (Header harus sesuai):</h4>
                                         <ul class="list-disc list-inside space-y-2 text-gray-700 ml-4">
-                                            <li><strong>NIS:</strong> Nomor Induk Siswa (harus unik)</li>
+                                            <li><strong>NIS:</strong> Nomor Induk Siswa (harus berbeda)</li>
                                             <li><strong>Nama Lengkap:</strong> Nama lengkap siswa</li>
-                                            <li><strong>Kelas:</strong> Nama kelas (contoh: 10 IPA 1)</li>
-                                            <li><strong>Jenis Kelamin:</strong> L (Laki-laki) atau P (Perempuan)</li>
-                                            <li><strong>Tanggal Lahir:</strong> Format: 2007-05-15 atau </li>
+                                            <li><strong>Kelas:</strong> Nama kelas (contoh: Kelas 1)</li>
+                                            <li><strong>Jenis Kelamin:</strong> L untuk (Laki-laki) atau P untuk (Perempuan)</li>
+                                            <li><strong>Tanggal Lahir:</strong> Format: 2007-05-15</li>
                                             <li><strong>Alamat:</strong> Alamat lengkap (boleh kosong)</li>
                                         </ul>
                                     </div>
@@ -209,9 +209,9 @@ class ImportSiswaAction
                 // Data template dengan header yang tepat (tanpa kutip)
                 $templateData = [
                     ['NIS', 'Nama Lengkap', 'Kelas', 'Jenis Kelamin', 'Tanggal Lahir', 'Alamat'],
-                    ['12345', 'Ahmad Fauzi', '10 IPA 1', 'L', '2007-05-15', 'Jl. Merdeka No. 123, Jakarta'],
-                    ['12346', 'Siti Nurhaliza', '10 IPA 1', 'P', '2007-08-20', 'Jl. Sudirman No. 456, Jakarta'],
-                    ['12347', 'Muhammad Rizki', '10 IPA 2', 'L', '2007-03-10', 'Jl. Diponegoro No. 789, Jakarta'],
+                    ['12345', 'Ahmad Fauzi', 'Kelas 1', 'L', '2007-05-15', 'Jl. Merdeka No. 123, Jakarta'],
+                    ['12346', 'Siti Nurhaliza', 'Kelas 2', 'P', '2007-08-20', 'Jl. Sudirman No. 456, Jakarta'],
+                    ['12347', 'Muhammad Rizki', 'Kelas 3', 'L', '2007-03-10', 'Jl. Diponegoro No. 789, Jakarta'],
                 ];
 
                 // Buat file temporary

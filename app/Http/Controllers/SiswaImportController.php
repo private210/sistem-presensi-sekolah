@@ -98,8 +98,8 @@ class SiswaImportController extends Controller
         // Data template dengan contoh
         $templateData = [
             ['NIS', 'Nama Lengkap', 'Kelas', 'Jenis Kelamin', 'Tanggal Lahir', 'Alamat'],
-            ['12345', 'Ahmad Fauzi', '10 IPA 1', 'L', '2007-05-15', 'Jl. Merdeka No. 123, Jakarta'],
-            ['12346', 'Siti Nurhaliza', '10 IPA 1', 'P', '2007-08-20', 'Jl. Sudirman No. 456, Jakarta'],
+            ['12345', 'Ahmad Fauzi', 'Kelas 1', 'L', '2007-05-15', 'Jl. Merdeka No. 123, Jakarta'],
+            ['12346', 'Siti Nurhaliza', 'Kelas 2', 'P', '2007-08-20', 'Jl. Sudirman No. 456, Jakarta'],
         ];
 
         return response()->stream(function () use ($templateData) {

@@ -28,10 +28,17 @@ class KelasResource extends Resource
                     ->label('Nama Kelas')
                     ->required()
                     ->maxLength(255),
-                Forms\Components\TextInput::make('tahun_ajaran')
+                Forms\Components\Select::make('tahun_ajaran')
                     ->label('Tahun Ajaran')
-                    ->required()
-                    ->numeric(),
+                    ->options([
+                        '2024/2025' => '2024/2025',
+                        '2025/2026' => '2025/2026',
+                        '2026/2027' => '2026/2027',
+                        '2027/2028' => '2027/2028',
+                        '2028/2029' => '2028/2029',
+                        '2029/2030' => '2029/2030',
+                    ])
+                    ->required(),
                 Forms\Components\Toggle::make('is_active')
                     ->label('Aktif')
                     ->required()
@@ -85,69 +92,69 @@ class KelasResource extends Resource
                 ]),
                 // Bulk action untuk mengaktifkan kelas
                 Tables\Actions\BulkAction::make('activate')
-                ->label('Aktifkan Kelas')
-                ->icon('heroicon-o-check-circle')
-                ->color('success')
-                ->action(function (Collection $records) {
-                    $count = $records->count();
-                    $records->each(function ($record) {
-                        $record->update(['is_active' => true]);
-                    });
+                    ->label('Aktifkan Kelas')
+                    ->icon('heroicon-o-check-circle')
+                    ->color('success')
+                    ->action(function (Collection $records) {
+                        $count = $records->count();
+                        $records->each(function ($record) {
+                            $record->update(['is_active' => true]);
+                        });
 
-                    Notification::make()
-                        ->title('Berhasil mengaktifkan ' . $count . ' kelas')
-                        ->success()
-                        ->send();
-                })
-                ->deselectRecordsAfterCompletion()
-                ->requiresConfirmation()
-                ->modalHeading('Aktifkan Kelas')
-                ->modalDescription('Apakah Anda yakin ingin mengaktifkan kelas yang dipilih?')
-                ->modalSubmitActionLabel('Ya, Aktifkan'),
+                        Notification::make()
+                            ->title('Berhasil mengaktifkan ' . $count . ' kelas')
+                            ->success()
+                            ->send();
+                    })
+                    ->deselectRecordsAfterCompletion()
+                    ->requiresConfirmation()
+                    ->modalHeading('Aktifkan Kelas')
+                    ->modalDescription('Apakah Anda yakin ingin mengaktifkan kelas yang dipilih?')
+                    ->modalSubmitActionLabel('Ya, Aktifkan'),
 
-            // Bulk action untuk menonaktifkan kelas
-            Tables\Actions\BulkAction::make('deactivate')
-                ->label('Nonaktifkan Kelas')
-                ->icon('heroicon-o-x-circle')
-                ->color('danger')
-                ->action(function (Collection $records) {
-                    $count = $records->count();
-                    $records->each(function ($record) {
-                        $record->update(['is_active' => false]);
-                    });
+                // Bulk action untuk menonaktifkan kelas
+                Tables\Actions\BulkAction::make('deactivate')
+                    ->label('Nonaktifkan Kelas')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->action(function (Collection $records) {
+                        $count = $records->count();
+                        $records->each(function ($record) {
+                            $record->update(['is_active' => false]);
+                        });
 
-                    Notification::make()
-                        ->title('Berhasil menonaktifkan ' . $count . ' kelas')
-                        ->success()
-                        ->send();
-                })
-                ->deselectRecordsAfterCompletion()
-                ->requiresConfirmation()
-                ->modalHeading('Nonaktifkan Kelas')
-                ->modalDescription('Apakah Anda yakin ingin menonaktifkan kelas yang dipilih?')
-                ->modalSubmitActionLabel('Ya, Nonaktifkan'),
+                        Notification::make()
+                            ->title('Berhasil menonaktifkan ' . $count . ' kelas')
+                            ->success()
+                            ->send();
+                    })
+                    ->deselectRecordsAfterCompletion()
+                    ->requiresConfirmation()
+                    ->modalHeading('Nonaktifkan Kelas')
+                    ->modalDescription('Apakah Anda yakin ingin menonaktifkan kelas yang dipilih?')
+                    ->modalSubmitActionLabel('Ya, Nonaktifkan'),
 
-            // Bulk action untuk toggle status (alternatif)
-            Tables\Actions\BulkAction::make('toggle_status')
-                ->label('Toggle Status')
-                ->icon('heroicon-o-arrow-path')
-                ->color('warning')
-                ->action(function (Collection $records) {
-                    $count = $records->count();
-                    $records->each(function ($record) {
-                        $record->update(['is_active' => !$record->is_active]);
-                    });
+                // Bulk action untuk toggle status (alternatif)
+                Tables\Actions\BulkAction::make('toggle_status')
+                    ->label('Toggle Status')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('warning')
+                    ->action(function (Collection $records) {
+                        $count = $records->count();
+                        $records->each(function ($record) {
+                            $record->update(['is_active' => !$record->is_active]);
+                        });
 
-                    Notification::make()
-                        ->title('Berhasil mengubah status ' . $count . ' kelas')
-                        ->success()
-                        ->send();
-                })
-                ->deselectRecordsAfterCompletion()
-                ->requiresConfirmation()
-                ->modalHeading('Toggle Status Kelas')
-                ->modalDescription('Apakah Anda yakin ingin mengubah status kelas yang dipilih?')
-                ->modalSubmitActionLabel('Ya, Ubah Status'),
+                        Notification::make()
+                            ->title('Berhasil mengubah status ' . $count . ' kelas')
+                            ->success()
+                            ->send();
+                    })
+                    ->deselectRecordsAfterCompletion()
+                    ->requiresConfirmation()
+                    ->modalHeading('Toggle Status Kelas')
+                    ->modalDescription('Apakah Anda yakin ingin mengubah status kelas yang dipilih?')
+                    ->modalSubmitActionLabel('Ya, Ubah Status'),
             ]);
     }
 
