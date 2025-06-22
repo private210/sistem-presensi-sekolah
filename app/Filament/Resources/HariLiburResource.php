@@ -96,7 +96,7 @@ class HariLiburResource extends Resource
                         }
                         return $record->tanggal_mulai->format('d M Y') . ' - ' . $record->tanggal_selesai->format('d M Y');
                     })
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(isToggledHiddenByDefault: false),
 
                 Tables\Columns\TextColumn::make('keterangan')
                     ->label('Keterangan')
@@ -137,7 +137,7 @@ class HariLiburResource extends Resource
                     ->label('Dibuat Pada')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: false),
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('tanggal_mulai', 'desc')
             ->filters([
