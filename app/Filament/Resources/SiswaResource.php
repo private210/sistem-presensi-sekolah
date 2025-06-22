@@ -2,16 +2,17 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\SiswaResource\Pages;
+use Filament\Forms;
+use Filament\Tables;
 use App\Models\Kelas;
 use App\Models\Siswa;
-use Filament\Forms;
 use Filament\Forms\Form;
-use Filament\Resources\Resource;
-use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Resources\Resource;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Eloquent\Builder;
+use App\Filament\Resources\SiswaResource\Pages;
+use App\Filament\Resources\SiswaResource\Actions\ImportSiswaAction;
 
 class SiswaResource extends Resource
 {
@@ -142,6 +143,10 @@ class SiswaResource extends Resource
                 Tables\Filters\TernaryFilter::make('is_active')
                     ->label('Status Aktif'),
             ])
+            ->headerActions([
+                ImportSiswaAction::make(),
+                ImportSiswaAction::downloadTemplate(),
+            ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
@@ -172,7 +177,7 @@ class SiswaResource extends Resource
     }
 
     // Membatasi akses resource berdasarkan role
-    public static function getEloquentQuery() : Builder
+    public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
             ->when(auth()->user()->hasRole('Wali Kelas'), function ($query) {

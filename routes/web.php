@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ExportController;
+use App\Http\Controllers\SiswaImportController;
 
 Route::get('/', function () {
     return redirect('/admin/login');
@@ -42,4 +43,26 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/export/presensi/general', [ExportController::class, 'exportGeneral'])
         ->name('export.presensi.general');
         // ->middleware('role:super_admin');
+});
+
+// Route untuk import siswa (dalam group auth dan role)
+Route::middleware(['auth', 'role:Admin|Kepala Sekolah|Wali Kelas'])->group(function () {
+
+    // Import siswa dari file
+    Route::post('/siswa/import', [SiswaImportController::class, 'import'])
+        ->name('siswa.import');
+
+    // Download template import
+    Route::get('/siswa/import/template', [SiswaImportController::class, 'downloadTemplate'])
+        ->name('siswa.import.template');
+
+    // Validasi data sebelum import (untuk preview)
+    Route::post('/siswa/import/validate', [SiswaImportController::class, 'validateImportData'])
+        ->name('siswa.import.validate');
+});
+
+// Route untuk export siswa (opsional)
+Route::middleware(['auth', 'role:Admin|Kepala Sekolah|Wali Kelas'])->group(function () {
+    Route::get('/siswa/export', [SiswaImportController::class, 'export'])
+        ->name('siswa.export');
 });
