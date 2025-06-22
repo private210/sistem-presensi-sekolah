@@ -165,47 +165,7 @@ class KepalaSekolahResource extends Resource
                             return $record;
                         });
                     }),
-                Tables\Actions\ViewAction::make('View')
-                    ->icon('heroicon-o-eye')
-                    ->label('Detail')
-                    ->modalHeading('Detail Kepala Sekolah')
-                    ->form([
-                        // Data User
-                        Forms\Components\Section::make('Data Akun')
-                            ->schema([
-                                Forms\Components\TextInput::make('user.name')
-                                    ->label('Nama Pengguna')
-                                    ->disabled(),
-                                Forms\Components\TextInput::make('user.email')
-                                    ->label('Email')
-                                    ->disabled(),
-                                Forms\Components\TextInput::make('password_status')
-                                    ->label('Status Password')
-                                    ->disabled()
-                                    ->placeholder('••••••••••••')
-                                    ->helperText('Password tidak ditampilkan untuk keamanan'),
-                            ]),
-
-                        // Data Kepala Sekolah
-                        Forms\Components\Section::make('Data Kepala Sekolah')
-                            ->schema([
-                                Forms\Components\TextInput::make('nip')
-                                    ->label('NIP')
-                                    ->disabled(),
-                                Forms\Components\TextInput::make('pangkat')
-                                    ->label('Pangkat')
-                                    ->disabled(),
-                                Forms\Components\TextInput::make('golongan')
-                                    ->label('Golongan')
-                                    ->disabled(),
-                                Forms\Components\TextInput::make('nama_lengkap')
-                                    ->label('Nama Lengkap')
-                                    ->disabled(),
-                                Forms\Components\Toggle::make('is_active')
-                                    ->label('Aktif')
-                                    ->disabled(),
-                            ]),
-                    ])
+                Tables\Actions\ViewAction::make()
                     ->mutateRecordDataUsing(function (array $data, $record): array {
                         // Menyiapkan data user untuk ditampilkan
                         if ($record->user) {

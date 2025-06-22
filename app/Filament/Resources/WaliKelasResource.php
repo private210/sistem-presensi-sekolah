@@ -178,44 +178,7 @@ class WaliKelasResource extends Resource
                             return $record;
                         });
                     }),
-                Tables\Actions\ViewAction::make('View')
-                    ->icon('heroicon-o-eye')
-                    ->label('Detail')
-                    ->modalHeading('Detail Wali Kelas')
-                    ->form([
-                        // Data User
-                        Forms\Components\Section::make('Data Akun')
-                            ->schema([
-                                Forms\Components\TextInput::make('user.name')
-                                    ->label('Nama Pengguna')
-                                    ->disabled(),
-                                Forms\Components\TextInput::make('user.email')
-                                    ->label('Email')
-                                    ->disabled(),
-                                Forms\Components\TextInput::make('password_status')
-                                    ->label('Status Password')
-                                    ->disabled()
-                                    ->placeholder('••••••••••••')
-                                    ->helperText('Password tidak ditampilkan untuk keamanan'),
-                            ]),
-
-                        // Data Kepala Sekolah
-                        Forms\Components\Section::make('Data Wali Kelas')
-                            ->schema([
-                                Forms\Components\TextInput::make('nama_lengkap')
-                                    ->label('Nama Lengkap')
-                                    ->disabled(),
-                                Forms\Components\TextInput::make('nip')
-                                    ->label('NIP')
-                                    ->disabled(),
-                                Forms\Components\Select::make('kelas.nama_kelas')
-                                    ->label('Kelas yang Dipegang')
-                                    ->disabled(),
-                                Forms\Components\Toggle::make('is_active')
-                                    ->label('Aktif')
-                                    ->disabled(),
-                            ]),
-                    ])
+                    Tables\Actions\ViewAction::make()
                     ->mutateRecordDataUsing(function (array $data, $record): array {
                         // Menyiapkan data user untuk ditampilkan
                         if ($record->user) {

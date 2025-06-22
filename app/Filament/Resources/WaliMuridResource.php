@@ -177,65 +177,18 @@ class WaliMuridResource extends Resource
                             return $record;
                         });
                     }),
-                Tables\Actions\ViewAction::make('View')
-                    ->icon('heroicon-o-eye')
-                    ->label('Detail')
-                    ->modalHeading('Detail Wali Murid')
-                    ->form([
-                        // Data User
-                        Forms\Components\Section::make('Data Akun')
-                            ->schema([
-                                Forms\Components\TextInput::make('user.name')
-                                    ->label('Nama Pengguna')
-                                    ->disabled(),
-                                Forms\Components\TextInput::make('user.email')
-                                    ->label('Email')
-                                    ->disabled(),
-                                Forms\Components\TextInput::make('password_status')
-                                    ->label('Status Password')
-                                    ->disabled()
-                                    ->placeholder('••••••••••••')
-                                    ->helperText('Password tidak ditampilkan untuk keamanan'),
-                            ]),
-
-                        // Data Kepala Sekolah
-                        Forms\Components\Section::make('Data Wali Murid')
-                            ->schema([
-                                Forms\Components\TextInput::make('nama_lengkap')
-                                    ->label('Nama Lengkap')
-                                    ->disabled(),
-                                Forms\Components\Select::make('hubungan')
-                                    ->label('Hubungan dengan Siswa')
-                                    ->options([
-                                        'Ayah' => 'Ayah',
-                                        'Ibu' => 'Ibu',
-                                        'Wali' => 'Wali',
-                                        'Lainnya' => 'Lainnya',
-                                    ])
-                                    ->disabled(),
-                                Forms\Components\Select::make('siswa.nama_lengkap')
-                                    ->label('Siswa')
-                                    ->options(
-                                        Siswa::where('is_active', true)
-                                            ->pluck('nama_lengkap', 'id')
-                                    )
-                                    ->disabled(),
-                                Forms\Components\Toggle::make('is_active')
-                                    ->label('Aktif')
-                                    ->disabled(),
-                            ]),
-                    ])
-                    ->mutateRecordDataUsing(function (array $data, $record): array {
-                        // Menyiapkan data user untuk ditampilkan
-                        if ($record->user) {
-                            $data['user']['name'] = $record->user->name;
-                            $data['user']['email'] = $record->user->email;
-                            // Tampilkan status password (bukan password asli)
-                            $data['password_status'] = $record->user->password ? '' : 'Password belum diatur';
-                        }
-                        return $data;
-                    }),
-                Tables\Actions\DeleteAction::make()
+                Tables\Actions\ViewAction::make()
+                ->mutateRecordDataUsing(function (array $data, $record): array {
+                    // Menyiapkan data user untuk ditampilkan
+                    if ($record->user) {
+                        $data['user']['name'] = $record->user->name;
+                        $data['user']['email'] = $record->user->email;
+                        // Tampilkan status password (bukan password asli)
+                        $data['password_status'] = $record->user->password ? '' : 'Password belum diatur';
+                    }
+                    return $data;
+                }),
+            Tables\Actions\DeleteAction::make()
                 ->action(function (WaliMurid $record) {
                     // Hapus kepala sekolah dan user terkait
                     \Illuminate\Support\Facades\DB::transaction(function () use ($record) {
