@@ -228,11 +228,29 @@ class WaliMuridResource extends Resource
                         }
                         return $data;
                     }),
-                Tables\Actions\DeleteAction::make(),
-            ])
+                Tables\Actions\DeleteAction::make()
+                ->action(function (WaliMurid $record) {
+                    // Hapus kepala sekolah dan user terkait
+                    \Illuminate\Support\Facades\DB::transaction(function () use ($record) {
+                        $record->delete();
+                        if ($record->user) {
+                            $record->user->delete();
+                        }
+                    });
+                }),
+        ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                    ->action(function (WaliMurid $record) {
+                        // Hapus kepala sekolah dan user terkait
+                        \Illuminate\Support\Facades\DB::transaction(function () use ($record) {
+                            $record->delete();
+                            if ($record->user) {
+                                $record->user->delete();
+                            }
+                        });
+                    }),
                 ]),
             ]);
     }

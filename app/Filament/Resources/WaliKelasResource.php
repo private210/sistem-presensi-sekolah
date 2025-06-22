@@ -2,16 +2,17 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Resources\WaliKelasResource\Pages;
-use App\Models\Kelas;
-use App\Models\User;
-use App\Models\WaliKelas;
 use Filament\Forms;
-use Filament\Forms\Form;
-use Filament\Resources\Resource;
+use App\Models\User;
 use Filament\Tables;
+use App\Models\Kelas;
+use Filament\Forms\Form;
+use App\Models\WaliKelas;
 use Filament\Tables\Table;
+use Filament\Resources\Resource;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Database\Eloquent\Collection;
+use App\Filament\Resources\WaliKelasResource\Pages;
 
 class WaliKelasResource extends Resource
 {
@@ -228,11 +229,31 @@ class WaliKelasResource extends Resource
                         }
                         return $data;
                     }),
-                Tables\Actions\DeleteAction::make(),
-            ])
+                Tables\Actions\DeleteAction::make()
+                ->action(function (WaliKelas $record) {
+                    // Hapus kepala sekolah dan user terkait
+                    \Illuminate\Support\Facades\DB::transaction(function () use ($record) {
+                        $record->delete();
+                        if ($record->user) {
+                            $record->user->delete();
+                        }
+                    });
+                }),
+        ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                    ->action(function (Collection $records) {
+                        // Hapus wali kelas dan user terkait
+                        \Illuminate\Support\Facades\DB::transaction(function () use ($records) {
+                            foreach ($records as $record) {
+                                $record->delete();
+                                if ($record->user) {
+                                    $record->user->delete();
+                                }
+                            }
+                        });
+                    }),
                 ]),
             ]);
     }

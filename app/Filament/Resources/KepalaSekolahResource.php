@@ -229,7 +229,18 @@ class KepalaSekolahResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                    ->action(function (array $records) {
+                        // Hapus kepala sekolah dan user terkait
+                        \Illuminate\Support\Facades\DB::transaction(function () use ($records) {
+                            foreach ($records as $record) {
+                                $record->delete();
+                                if ($record->user) {
+                                    $record->user->delete();
+                                }
+                            }
+                        });
+                    }),
                 ]),
             ]);
     }
