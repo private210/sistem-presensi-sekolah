@@ -65,6 +65,10 @@ class KepalaSekolahResource extends Resource
                 // Data  Kepala Sekolah
                 Forms\Components\Section::make('Data Kepala Sekolah')
                     ->schema([
+                        Forms\Components\TextInput::make('nama_lengkap')
+                            ->label('Nama Lengkap')
+                            ->required()
+                            ->maxLength(255),
                         Forms\Components\TextInput::make('nip')
                             ->label('NIP')
                             ->maxLength(20),
@@ -74,10 +78,6 @@ class KepalaSekolahResource extends Resource
                         Forms\Components\TextInput::make('golongan')
                             ->label('Golongan')
                             ->maxLength(20),
-                        Forms\Components\TextInput::make('nama_lengkap')
-                            ->label('Nama Lengkap')
-                            ->required()
-                            ->maxLength(255),
                         Forms\Components\Toggle::make('is_active')
                             ->label('Aktif')
                             ->required()
@@ -230,17 +230,17 @@ class KepalaSekolahResource extends Resource
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make()
-                    ->action(function (array $records) {
-                        // Hapus kepala sekolah dan user terkait
-                        \Illuminate\Support\Facades\DB::transaction(function () use ($records) {
-                            foreach ($records as $record) {
-                                $record->delete();
-                                if ($record->user) {
-                                    $record->user->delete();
+                        ->action(function (array $records) {
+                            // Hapus kepala sekolah dan user terkait
+                            \Illuminate\Support\Facades\DB::transaction(function () use ($records) {
+                                foreach ($records as $record) {
+                                    $record->delete();
+                                    if ($record->user) {
+                                        $record->user->delete();
+                                    }
                                 }
-                            }
-                        });
-                    }),
+                            });
+                        }),
                 ]),
             ]);
     }

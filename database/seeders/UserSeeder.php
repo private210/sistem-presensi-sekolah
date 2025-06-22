@@ -27,11 +27,11 @@ class UserSeeder extends Seeder
         $admin->assignRole('Admin');
 
         // Kepala Sekolah
-        $kepalaSekolah = User::create([
-            'name' => 'Kepala Sekolah',
-            'email' => 'kepalasekolah@example.com',
-            'password' => Hash::make('kepsek123'),
-        ]);
-        $kepalaSekolah->assignRole('Kepala Sekolah');
+        // $kepalaSekolah = User::create([
+        //     'name' => 'Kepala Sekolah',
+        //     'email' => 'kepalasekolah@example.com',
+        //     'password' => Hash::make('kepsek123'),
+        // ]);
+        // $kepalaSekolah->assignRole('Kepala Sekolah');
     }
 }
