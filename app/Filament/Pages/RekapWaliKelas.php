@@ -333,7 +333,7 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
             ->headerActions([
                 \Filament\Tables\Actions\Action::make('refreshData')
                 ->label('Refresh Data')
-                ->color('secondary')
+                ->color('warning')
                 ->icon('heroicon-o-arrow-path')
                 ->action(function () {
                     $this->resetTable();
