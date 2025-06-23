@@ -20,7 +20,7 @@ class Siswa extends Model
         'tanggal_lahir',
         'foto',
         'is_active',
-        'user_id',
+        // 'user_id',
     ];
 
     protected $casts = [
@@ -47,8 +47,8 @@ class Siswa extends Model
     {
         return $this->hasMany(Izin::class);
     }
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
-    }
+    // public function user(): BelongsTo
+    // {
+    //     return $this->belongsTo(User::class);
+    // }
 }
