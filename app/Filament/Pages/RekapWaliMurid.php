@@ -14,10 +14,10 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Filament\Forms\Components\Grid;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Grouping\Group;
+use Filament\Forms\Components\Radio;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\RekapWaliKelasExport;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Radio;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Tables\Actions\BulkAction;
 use Filament\Tables\Actions\ViewAction;
@@ -332,7 +332,7 @@ class RekapWaliMurid extends Page implements HasForms, HasTable
             ->headerActions([
                 \Filament\Tables\Actions\Action::make('refreshData')
                 ->label('Refresh Data')
-                ->color('secondary')
+                ->color('warning')
                 ->icon('heroicon-o-arrow-path')
                 ->action(function () {
                     $this->resetTable();
@@ -387,6 +387,76 @@ class RekapWaliMurid extends Page implements HasForms, HasTable
 
                         $this->js('setTimeout(function() { window.location.href = "' . route('export.presensi.wali-murid-pdf', $params) . '"; }, 1000);');
                     }),
+            ])
+            ->actions([
+                ViewAction::make()
+                    ->label('Detail')
+                    ->modalHeading(fn($record) => 'Detail Presensi - ' . $record->siswa->nama_lengkap)
+                    ->infolist([
+                        Section::make('Informasi Presensi')
+                            ->schema([
+                                TextEntry::make('tanggal_presensi')
+                                    ->label('Tanggal Presensi')
+                                    ->date('d F Y'),
+                                TextEntry::make('pertemuan_ke')
+                                    ->label('Pertemuan')
+                                    ->formatStateUsing(fn($state) => 'Pertemuan ke-' . $state),
+                                TextEntry::make('status')
+                                    ->label('Status Kehadiran')
+                                    ->badge()
+                                    ->color(fn(string $state): string => match ($state) {
+                                        'Hadir' => 'success',
+                                        'Izin' => 'info',
+                                        'Sakit' => 'warning',
+                                        'Alpa' => 'danger',
+                                        default => 'gray',
+                                    }),
+                            ])
+                            ->columns(3),
+                        Section::make('Data Siswa')
+                            ->schema([
+                                TextEntry::make('siswa.nis')
+                                    ->label('NIS'),
+                                TextEntry::make('siswa.nama_lengkap')
+                                    ->label('Nama Lengkap')
+                                    ->weight('bold'),
+                                TextEntry::make('kelas.nama_kelas')
+                                    ->label('Kelas'),
+                                TextEntry::make('siswa.jenis_kelamin')
+                                    ->label('Jenis Kelamin')
+                                    ->placeholder('Tidak diisi'),
+                                TextEntry::make('siswa.tempat_lahir')
+                                    ->label('Tempat Lahir')
+                                    ->placeholder('Tidak diisi'),
+                                TextEntry::make('siswa.tanggal_lahir')
+                                    ->label('Tanggal Lahir')
+                                    ->date('d F Y')
+                                    ->placeholder('Tidak diisi'),
+                            ])
+                            ->columns(2),
+                        Section::make('Keterangan')
+                            ->schema([
+                                TextEntry::make('keterangan')
+                                    ->label('Keterangan')
+                                    ->placeholder('Tidak ada keterangan')
+                                    ->columnSpanFull(),
+                            ])
+                            ->visible(fn($record) => !empty($record->keterangan)),
+                        Section::make('Informasi Sistem')
+                            ->schema([
+                                TextEntry::make('created_at')
+                                    ->label('Dibuat pada')
+                                    ->dateTime('d F Y, H:i:s'),
+                                TextEntry::make('updated_at')
+                                    ->label('Terakhir diubah')
+                                    ->dateTime('d F Y, H:i:s'),
+                            ])
+                            ->columns(2)
+                            ->collapsible(),
+                    ])
+                    ->modalWidth('2xl')
+                    ->color('info')
+                    ->icon('heroicon-o-eye'),
             ])
             ->bulkActions([
                 // BulkAction::make('export_selected')

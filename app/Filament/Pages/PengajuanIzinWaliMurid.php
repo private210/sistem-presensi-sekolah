@@ -321,6 +321,8 @@ class PengajuanIzinWaliMurid extends Page implements HasTable, HasForms
                             ->directory('bukti-izin')
                             ->visibility('public')
                             ->required()
+                            ->imagePreviewHeight(250)
+                            ->openable()
                             ->acceptedFileTypes(['image/jpeg', 'image/png', 'application/pdf'])
                             ->maxSize(2048),
                     ]),
