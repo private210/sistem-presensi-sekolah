@@ -2,38 +2,38 @@
 
 namespace App\Filament\Pages;
 
-use Carbon\Carbon;
+use App\Filament\Widgets\DashboardKepalaSekolahStats;
 use App\Models\Kelas;
 use App\Models\Presensi;
-use Filament\Forms\Form;
-use Filament\Pages\Page;
-use Filament\Tables\Table;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
+use Carbon\Carbon;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Grid;
-use Filament\Tables\Filters\Filter;
-use Filament\Tables\Grouping\Group;
-use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\Grid;
+use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
+use Filament\Notifications\Notification;
+use Filament\Pages\Page;
+use Filament\Tables\Actions\Action as TableAction;
+use Filament\Tables\Actions\ActionGroup;
 use Filament\Tables\Actions\BulkAction;
+use Filament\Tables\Actions\BulkActionGroup;
 use Filament\Tables\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
-use Illuminate\Support\Facades\Session;
-use Filament\Notifications\Notification;
-use Filament\Tables\Actions\ActionGroup;
-use Filament\Forms\Components\DatePicker;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Grouping\Group;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Session;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
-use Filament\Tables\Actions\BulkActionGroup;
-use Illuminate\Database\Eloquent\Collection;
-use Filament\Forms\Concerns\InteractsWithForms;
-use Filament\Tables\Concerns\InteractsWithTable;
-use Filament\Tables\Actions\Action as TableAction;
-use App\Filament\Widgets\DashboardKepalaSekolahStats;
-use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 
 class RekapKepalaSekolah extends Page implements HasForms, HasTable
 {
@@ -211,31 +211,6 @@ class RekapKepalaSekolah extends Page implements HasForms, HasTable
                     ->limit(30)
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->filters([
-                SelectFilter::make('status')
-                    ->label('Status')
-                    ->options([
-                        'Hadir' => 'Hadir',
-                        'Izin' => 'Izin',
-                        'Sakit' => 'Sakit',
-                        'Tanpa Keterangan' => 'Tanpa Keterangan',
-                        'Alpa' => 'Alpa',
-                    ]),
-            ])
-            ->groups([
-                Group::make('kelas.nama_kelas')
-                    ->label('Kelas')
-                    ->collapsible()
-                    ->titlePrefixedWithLabel(false),
-                Group::make('tanggal_presensi')
-                    ->label('Tanggal')
-                    ->collapsible(),
-                Group::make('pertemuan_ke')
-                    ->label('Hari Ke')
-                    ->collapsible(),
-            ])
-            ->defaultGroup('kelas.nama_kelas')
-            ->paginated([10, 25, 50, 100])
             ->actions([
                 ViewAction::make()
                     ->label('Detail')
@@ -290,26 +265,40 @@ class RekapKepalaSekolah extends Page implements HasForms, HasTable
                                     ->columnSpanFull(),
                             ])
                             ->visible(fn($record) => !empty($record->keterangan)),
-                        Section::make('Informasi Sistem')
-                            ->schema([
-                                TextEntry::make('created_at')
-                                    ->label('Dibuat pada')
-                                    ->dateTime('d F Y, H:i:s'),
-                                TextEntry::make('updated_at')
-                                    ->label('Terakhir diubah')
-                                    ->dateTime('d F Y, H:i:s'),
-                            ])
-                            ->columns(2)
-                            ->collapsible(),
                     ])
                     ->modalWidth('2xl')
                     ->color('info')
                     ->icon('heroicon-o-eye'),
             ])
+            ->filters([
+                SelectFilter::make('status')
+                    ->label('Status')
+                    ->options([
+                        'Hadir' => 'Hadir',
+                        'Izin' => 'Izin',
+                        'Sakit' => 'Sakit',
+                        'Tanpa Keterangan' => 'Tanpa Keterangan',
+                        'Alpa' => 'Alpa',
+                    ]),
+            ])
+            ->groups([
+                Group::make('kelas.nama_kelas')
+                    ->label('Kelas')
+                    ->collapsible()
+                    ->titlePrefixedWithLabel(false),
+                Group::make('tanggal_presensi')
+                    ->label('Tanggal')
+                    ->collapsible(),
+                Group::make('pertemuan_ke')
+                    ->label('Hari Ke')
+                    ->collapsible(),
+            ])
+            ->defaultGroup('kelas.nama_kelas')
+            ->paginated([10, 25, 50, 100])
             ->headerActions([
                 TableAction::make('refreshData')
                     ->label('Refresh Data')
-                    ->color('warning')
+                    ->color('secondary')
                     ->icon('heroicon-o-arrow-path')
                     ->action(function () {
                         $this->resetTable();
