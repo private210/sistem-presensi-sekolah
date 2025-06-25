@@ -235,8 +235,7 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
                                     ->label('Tanggal Presensi')
                                     ->date('d F Y'),
                                 TextEntry::make('pertemuan_ke')
-                                    ->label('Pertemuan')
-                                    ->formatStateUsing(fn($state) => 'Pertemuan ke-' . $state),
+                                    ->label('Hari Ke'),
                                 TextEntry::make('status')
                                     ->label('Status Kehadiran')
                                     ->badge()
@@ -278,17 +277,6 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
                                     ->columnSpanFull(),
                             ])
                             ->visible(fn($record) => !empty($record->keterangan)),
-                        Section::make('Informasi Sistem')
-                            ->schema([
-                                TextEntry::make('created_at')
-                                    ->label('Dibuat pada')
-                                    ->dateTime('d F Y, H:i:s'),
-                                TextEntry::make('updated_at')
-                                    ->label('Terakhir diubah')
-                                    ->dateTime('d F Y, H:i:s'),
-                            ])
-                            ->columns(2)
-                            ->collapsible(),
                     ])
                     ->modalWidth('2xl')
                     ->color('info')
@@ -321,10 +309,8 @@ class RekapWaliKelas extends Page implements HasForms, HasTable
             ])
             ->groups([
                 Group::make('pertemuan_ke')
-                    ->label('Hari')
-                    ->collapsible()
-                    ->titlePrefixedWithLabel(false)
-                    ->getTitleFromRecordUsing(fn($record) => 'Pertemuan ke-' . $record->pertemuan_ke),
+                    ->label('Hari Ke')
+                    ->collapsible(),
                 Group::make('status')
                     ->label('Status')
                     ->collapsible(),

@@ -20,12 +20,15 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Tables\Actions\BulkAction;
+use Filament\Tables\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Notifications\Notification;
 use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Database\Eloquent\Builder;
+use Filament\Infolists\Components\Section;
+use Filament\Infolists\Components\TextEntry;
 use Illuminate\Database\Eloquent\Collection;
 use Filament\Tables\Columns\Summarizers\Count;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -236,6 +239,64 @@ class RekapWaliMurid extends Page implements HasForms, HasTable
                     ->label('Keterangan')
                     ->limit(50)
                     ->toggleable(),
+            ])
+            ->actions([
+                ViewAction::make()
+                    ->label('Detail')
+                    ->modalHeading(fn($record) => 'Detail Presensi - ' . $record->siswa->nama_lengkap)
+                    ->infolist([
+                        Section::make('Informasi Presensi')
+                            ->schema([
+                                TextEntry::make('tanggal_presensi')
+                                    ->label('Tanggal Presensi')
+                                    ->date('d F Y'),
+                                TextEntry::make('pertemuan_ke')
+                                    ->label('Hari Ke'),
+                                TextEntry::make('status')
+                                    ->label('Status Kehadiran')
+                                    ->badge()
+                                    ->color(fn(string $state): string => match ($state) {
+                                        'Hadir' => 'success',
+                                        'Izin' => 'info',
+                                        'Sakit' => 'warning',
+                                        'Alpa' => 'danger',
+                                        default => 'gray',
+                                    }),
+                            ])
+                            ->columns(3),
+                        Section::make('Data Siswa')
+                            ->schema([
+                                TextEntry::make('siswa.nis')
+                                    ->label('NIS'),
+                                TextEntry::make('siswa.nama_lengkap')
+                                    ->label('Nama Lengkap')
+                                    ->weight('bold'),
+                                TextEntry::make('kelas.nama_kelas')
+                                    ->label('Kelas'),
+                                TextEntry::make('siswa.jenis_kelamin')
+                                    ->label('Jenis Kelamin')
+                                    ->placeholder('Tidak diisi'),
+                                TextEntry::make('siswa.tempat_lahir')
+                                    ->label('Tempat Lahir')
+                                    ->placeholder('Tidak diisi'),
+                                TextEntry::make('siswa.tanggal_lahir')
+                                    ->label('Tanggal Lahir')
+                                    ->date('d F Y')
+                                    ->placeholder('Tidak diisi'),
+                            ])
+                            ->columns(2),
+                        Section::make('Keterangan')
+                            ->schema([
+                                TextEntry::make('keterangan')
+                                    ->label('Keterangan')
+                                    ->placeholder('Tidak ada keterangan')
+                                    ->columnSpanFull(),
+                            ])
+                            ->visible(fn($record) => !empty($record->keterangan)),
+                    ])
+                    ->modalWidth('2xl')
+                    ->color('info')
+                    ->icon('heroicon-o-eye'),
             ])
             ->filters([
                 SelectFilter::make('status')

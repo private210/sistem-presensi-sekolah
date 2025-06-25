@@ -131,39 +131,6 @@
             </div>
         </x-filament::section>
 
-        {{-- Section Persentase Kehadiran --}}
-        {{-- <x-filament::section class="mt-6">
-            <x-slot name="heading">
-                Persentase Kehadiran Keseluruhan
-            </x-slot>
-
-            <div class="flex items-center justify-between">
-                <div>
-                    <p class="text-sm text-gray-600 dark:text-gray-400">
-                        Total {{ $stats['total_siswa'] }} siswa dengan {{ $totalPresensi }} total presensi
-                    </p>
-                </div>
-                <div class="text-right">
-                    <div class="text-3xl font-bold text-success-600 dark:text-success-400">
-                        {{ $stats['persentase_kehadiran'] }}%
-                    </div>
-                    <div class="text-sm text-gray-600 dark:text-gray-400">
-                        Tingkat kehadiran
-                    </div>
-                </div>
-            </div>
-
-            <div class="mt-4">
-                <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
-                    <span>Progress Kehadiran</span>
-                    <span>{{ $stats['persentase_kehadiran'] }}%</span>
-                </div>
-                <div class="w-full bg-gray-200 rounded-full h-3 dark:bg-gray-700">
-                    <div class="bg-gradient-to-r from-success-500 to-success-400 h-3 rounded-full transition-all duration-1000"
-                         style="width: {{ $stats['persentase_kehadiran'] }}%"></div>
-                </div>
-            </div>
-        </x-filament::section> --}}
     @endif
 
     {{-- Tabel Data --}}
