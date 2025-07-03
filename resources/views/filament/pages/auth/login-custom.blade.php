@@ -456,7 +456,7 @@
 
     {{-- Footer --}}
     <div class="login-footer">
-        <p>© {{ date('Y') }} SDN Banjarejo. Semua hak dilindungi.</p>
+        <p>© {{ date('Y') }} <a href="{{ url('/') }}">SDN Banjarejo</a>. Semua hak dilindungi.</p>
         <p style="margin-top: 0.5rem; font-size: 0.8rem;">
             Butuh bantuan? Hubungi admin sekolah
         </p>

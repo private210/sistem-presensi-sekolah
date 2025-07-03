@@ -1,19 +1,14 @@
 <x-filament-panels::page>
-    {{-- Custom styling untuk dashboard --}}
     <style>
         .dashboard-header {
             background: linear-gradient(135deg, #667eea27 0%, #764ba242 100%);
             border: 1px solid;
             border-radius: 1rem;
             padding: 2rem;
-            /* margin-bottom: 2rem; */
-            /* color: white; */
         }
         .dashboard-header img {
             width: 100px;
             height: auto;
-            /* margin-left: auto; */
-            /* margin-right: 1rem; */
         }
 
         .dashboard-stats {
@@ -23,14 +18,12 @@
         }
 
         .widget-card {
-            /* background: white; */
             border-radius: 0.75rem;
             box-shadow: 0 1px 3px rgba(81, 3, 3, 0.452);
             overflow: hidden;
         }
 
         .quick-action {
-            /* background: #f8fafc; */
             border: 2px dashed #cbd5e0;
             border-radius: 0.75rem;
             padding: 1.5rem;
@@ -40,7 +33,6 @@
 
         .quick-action:hover {
             border-color: #4299e1;
-            /* background: #ebf8ff; */
             background: linear-gradient(135deg, #667eea79 0%, #764ba27b 100%);
         }
 
@@ -50,15 +42,12 @@
             margin-top: 0.5rem;
         }
 
-        /* Widget container styling */
         .widgets-container {
             display: grid;
             gap: 1.5rem;
-            /* grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); */
         }
 
         .widget-wrapper {
-            /* background: white; */
             border-radius: 0.75rem;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             overflow: hidden;
@@ -67,20 +56,17 @@
         @media (max-width: 768px) {
             .dashboard-header {
                 padding: 1rem;
-                /* text-align: center; */
             }
 
             .widgets-container {
                 grid-template-columns: 1fr;
             }
             .dashboard-header img {
-                /* display: none; */
                 margin-bottom: 5rem;
             }
         }
     </style>
 
-    {{-- Header Dashboard dengan Informasi Role --}}
     <div class="dashboard-header">
         <div class="flex items-center justify-between">
             <div>
@@ -94,28 +80,6 @@
             <div class="tex-right">
                 <img src="{{ asset('images/LogoSD.png') }}" alt="">
             </div>
-
-            {{-- @if(auth()->user()->hasRole('Wali Kelas'))
-                <div class="text-right">
-                    <div class="text-sm opacity-75">Kelas yang Dipegang</div>
-                    <div class="text-2xl font-bold">
-                        {{ auth()->user()->waliKelas?->kelas?->nama_kelas ?? 'Belum Ditentukan' }}
-                    </div>
-                    <div class="text-sm opacity-75">
-                        {{ auth()->user()->waliKelas?->kelas?->siswa()->where('is_active', true)->count() ?? 0 }} Siswa
-                    </div>
-                </div>
-            @elseif(auth()->user()->hasRole('Wali Murid'))
-                <div class="text-right">
-                    <div class="text-sm opacity-75">Nama Anak</div>
-                    <div class="text-xl font-bold">
-                        {{ auth()->user()->waliMurid?->siswa?->nama_lengkap ?? 'Belum Ditentukan' }}
-                    </div>
-                    <div class="text-sm opacity-75">
-                         {{ auth()->user()->waliMurid?->siswa?->kelas?->nama_kelas ?? '-' }}
-                    </div>
-                </div>
-            @endif --}}
         </div>
     </div>
 
@@ -196,8 +160,7 @@
         @endif
     </div>
 
-    {{-- Alternative: Manual Widget Rendering jika diperlukan --}}
-    @if(false) {{-- Set ke true jika ingin menggunakan metode manual --}}
+    @if(false)
         <div class="dashboard-stats">
             {!! $this->getRenderedWidgets() !!}
         </div>

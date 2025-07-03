@@ -4,12 +4,15 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\SiswaImportController;
 
-Route::get('/', function () {
-    return redirect('/admin/login');
-});
 // Route::get('/', function () {
-//     return view('home');
+//     return redirect('/admin/login');
 // });
+// Route::get('/', function () {
+//     return view('maintenance');
+// });
+Route::get('/', function () {
+    return view('view');
+});
 Route::middleware(['auth'])->group(function () {
 
     // Export untuk Kepala Sekolah

@@ -10,6 +10,7 @@ use Filament\Support\Colors\Color;
 use App\Filament\Pages\CustomDashboard;
 use App\Filament\Pages\Auth\LoginCustom;
 use Filament\Http\Middleware\Authenticate;
+use Filament\Navigation\MenuItem;
 use App\Filament\Widgets\IzinPendingWidget;
 use App\Filament\Widgets\SiswaRankingWidget;
 use App\Filament\Widgets\ChartPresensiWidget;
@@ -65,6 +66,12 @@ class AdminPanelProvider extends PanelProvider
                 // Widgets\FilamentInfoWidget::class,
             ])
             ->sidebarFullyCollapsibleOnDesktop()
+            ->userMenuItems([
+                MenuItem::make()
+                    ->label('Home')
+                    ->url(url('/'))
+                    ->icon('heroicon-o-home'),
+            ])
             // ->databaseNotifications()
             ->middleware([
                 EncryptCookies::class,

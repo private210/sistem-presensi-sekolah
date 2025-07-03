@@ -90,7 +90,7 @@ class WaliMuridResource extends Resource
                                     })
                                     ->pluck('nama_lengkap', 'id')
                             )
-                            // ->searchable()
+                            ->searchable()
                             ->required(),
                         Forms\Components\Toggle::make('is_active')
                             ->label('Aktif')
