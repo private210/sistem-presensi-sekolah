@@ -5,6 +5,9 @@ namespace App\Providers\Filament;
 use Filament\Pages;
 use Filament\Panel;
 use Filament\Widgets;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Event;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use App\Filament\Pages\CustomDashboard;
@@ -71,6 +74,10 @@ class AdminPanelProvider extends PanelProvider
                     ->label('Home')
                     ->url(url('/'))
                     ->icon('heroicon-o-home'),
+                // Override logout
+                'logout' => MenuItem::make()
+                    ->label('Keluar')
+                    ->icon('heroicon-o-arrow-left-on-rectangle'),
             ])
             // ->databaseNotifications()
             ->middleware([
@@ -88,5 +95,17 @@ class AdminPanelProvider extends PanelProvider
                 Authenticate::class,
             ])
             ->plugin(FilamentShieldPlugin::make());
+    }
+    public function boot(): void
+    {
+        // Listen to logout route
+        Route::post('/admin/logout', function () {
+            Auth::guard('web')->logout(); // Logout user
+
+            request()->session()->invalidate();
+            request()->session()->regenerateToken();
+
+            return redirect('/'); // ✅ Redirect ke home
+        })->name('filament.admin.logout');
     }
 }
